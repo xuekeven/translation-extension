@@ -184,6 +184,7 @@ function createTranslatePopup(text, x, y) {
 
   // 创建关闭按钮
   const closeButton = document.createElement('button');
+  closeButton.className = 'translate-popup-close-button';
   closeButton.textContent = '×';
   closeButton.style.cssText = `
     position: absolute;
@@ -509,8 +510,7 @@ function updateTranslatePopup(translation, word, complete) {
     document.addEventListener('mousemove', drag);
     document.addEventListener('mouseup', stopDragging);
   }
-  
-  translatePopup.innerHTML = translation;
+  translatePopup.updateContent(translation);
   
   // 修改播放按钮的击事件处理
   const playButtons = translatePopup.querySelectorAll('.playButton');
