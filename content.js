@@ -85,22 +85,9 @@ function saveAndRestoreSelection(action) {
  */
 function createTranslateIcon(x, y) {
   const translateIcon = document.createElement('div');
-  translateIcon.style.cssText = `
-    position: fixed;
-    width: 30px;
-    height: 30px;
-    background: #667eea;
-    border-radius: 5px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    z-index: 1000;
-    left: ${x}px;
-    top: ${y}px;
-  `;
   translateIcon.className = 'translate-icon';
+  translateIcon.style.left = `${x}px`;
+  translateIcon.style.top = `${y}px`;
   translateIcon.innerHTML = '<span style="color: white; font-weight: bold;">译</span>';
   translateIcon.addEventListener('click', e => handleIconClick(e, x, y));
   document.body.appendChild(translateIcon);
@@ -156,49 +143,14 @@ function handleIconClick(e, x, y) {
  */
 function createTranslatePopup(text, x, y) {
   const translatePopup = document.createElement('div');
-  translatePopup.style.cssText = `
-    text-align: left;
-    position: fixed;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    padding: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
-    max-width: 400px;
-    font-family: Arial, sans-serif;
-    left: ${x}px;
-    top: ${y}px; // 添加当前滚动位置
-    overflow-y: auto;
-    border-radius: 8px;
-    width: 350px;
-    max-height: 500px;
-    z-index: 1000;
-    cursor: move;
-    line-height: 1.5;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-  `;
+  translatePopup.style.left = `${x}px`;
+  translatePopup.style.top = `${y}px`;
   translatePopup.className = 'translate-popup';
 
   // 创建关闭按钮
   const closeButton = document.createElement('button');
   closeButton.className = 'translate-popup-close-button';
   closeButton.textContent = '×';
-  closeButton.style.cssText = `
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    background: none;
-    border: none;
-    color: rgba(255,255,255,0.8);
-    font-size: 20px;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-    transition: color 0.3s ease;
-  `;
   closeButton.addEventListener('click', () => translatePopup.remove());
   closeButton.addEventListener('mouseover', function() {
     this.style.color = 'white';
@@ -210,7 +162,6 @@ function createTranslatePopup(text, x, y) {
   // 创建内容div
   const contentDiv = document.createElement('div');
   contentDiv.style.lineHeight = '1.4';
-  contentDiv.style.cursor = 'auto';
   contentDiv.innerHTML = text; // 用 innerHTML 来渲染 HTML
 
   // 组装弹出框

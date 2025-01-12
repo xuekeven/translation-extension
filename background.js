@@ -331,30 +331,12 @@ async function fetchWordDefinition(word, tabId) {
       `;
       const ukButton = `
         <button class="playButton phoneticButton" data-word="${word}" data-type="1" data-phonetic="uk" style="
-          background: none;
-          border: none;
-          color: white;
-          padding: 2px;
-          text-align: center;
-          display: inline-block;
-          font-size: 12px;
-          cursor: pointer;
-          font-family: Arial, sans-serif;
           ${phoneticPreference === 'us' ? 'display: none;' : ''}
         ">/${wordInfo.ukphone || 'n/a'}/</button>
       `;
 
       const usButton = `
         <button class="playButton phoneticButton" data-word="${word}" data-type="2" data-phonetic="us" style="
-          background: none;
-          border: none;
-          color: white;
-          padding: 2px;
-          text-align: center;
-          display: inline-block;
-          font-size: 12px;
-          cursor: pointer;
-          font-family: Arial, sans-serif;
           ${phoneticPreference === 'uk' ? 'display: none;' : ''}
         ">/${wordInfo.usphone || 'n/a'}/</button>
       `;
@@ -364,19 +346,7 @@ async function fetchWordDefinition(word, tabId) {
 
     // 添加查看更多按钮
     result += `
-        <button class="moreButton" data-word="${word}" style="
-          background-color: #4CAF50;
-          border: none;
-          color: white;
-          text-align: center;
-          text-decoration: none;
-          display: inline-block;
-          font-size: 12px;
-          margin-left: 10px;
-          cursor: pointer;
-          border-radius: 3px;
-          padding: 3px;
-        ">查看更多</button>
+        <button class="moreButton" data-word="${word}">查看更多</button>
       </div>
     `;
 

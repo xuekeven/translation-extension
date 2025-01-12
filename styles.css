@@ -1,0 +1,88 @@
+/* 翻译图标样式 */
+.translate-icon {
+  position: fixed;
+  width: 30px;
+  height: 30px;
+  background: #667eea;
+  border-radius: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+
+/* 翻译弹层样式 */
+.translate-popup {
+  text-align: left;
+  position: fixed;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+  max-width: 400px;
+  font-family: Arial, sans-serif;
+  border-radius: 8px;
+  width: 350px;
+  max-height: 500px;
+  z-index: 1000;
+  cursor: move;
+  line-height: 1.5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.translate-popup > div {
+  cursor: move;
+}
+
+/* 关闭按钮样式 */
+.translate-popup-close-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.8);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.3s ease;
+}
+
+.translate-popup-close-button:hover {
+  color: white;
+}
+
+/* 播放按钮样式 */
+.playButton {
+  background: none;
+  border: none;
+  color: white;
+  padding: 2px;
+  text-align: center;
+  display: inline-block;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+}
+
+/* 更多按钮样式 */
+.moreButton {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 12px;
+  margin-left: 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 3px;
+} 
