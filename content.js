@@ -141,9 +141,10 @@ function handleIconClick(e, x, y) {
   e.preventDefault(); // 阻止默认行为
   e.stopPropagation(); // 阻止事件冒泡
 
-  const iconRect = e.currentTarget.getBoundingClientRect();
-  console.log('iconRect:', iconRect);
-  translateText(lastSelectedText, iconRect.left, iconRect.top);
+  // const iconRect = e.currentTarget.getBoundingClientRect();
+  // console.log('---iconRect', lastSelectedText);
+  // console.log('iconRect---', iconRect);
+  translateText(lastSelectedText, x, y);
 }
 
 /**
@@ -164,7 +165,6 @@ function createTranslatePopup(text, x, y) {
     padding: 10px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
     max-width: 400px;
-    cursor: move;
     font-family: Arial, sans-serif;
     left: ${x}px;
     top: ${y}px; // 添加当前滚动位置
@@ -397,7 +397,6 @@ function mouseupHandler(e) {
   if (!isTranslationEnabled) return; // 如果翻译功能被禁用，直接返回
 
   const selectedText = window.getSelection().toString().trim();
-  lastSelectedText = selectedText;
   // 如果选中的文本不是英文单词，则不进行翻译
   if (!selectedText || !isTranslateable(selectedText)) return;
 
@@ -414,7 +413,8 @@ function mouseupHandler(e) {
   const rect = range.getBoundingClientRect();
   const x = e.x;
   const y = rect.bottom;
-  console.log('test--- mouseup', e, rect, x, y);
+  lastSelectedText = selectedText;
+  // console.log('test--- mouseup', e, rect, x, y, lastSelectedText);
 
   // 清除选区，方便操作、滚动页面
   // const selection = window.getSelection();
@@ -477,6 +477,7 @@ document.addEventListener('mouseup', function() {
     isDragging = false;
     // 在拖动结束后，更新lastSelectedText为当前选中的文本
     lastSelectedText = window.getSelection().toString().trim();
+    // console.log('test--- mouseup', lastSelectedText);
   }
 });
 
