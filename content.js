@@ -449,7 +449,7 @@ function updateTranslatePopup(translation, word, complete) {
       border-radius: 8px;
       width: 350px;
       max-height: 500px;
-      z-index: 1000;
+      z-index: 9999;
       line-height: 1.5;
       overflow-y: auto;
       overflow-x: hidden;
