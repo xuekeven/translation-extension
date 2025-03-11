@@ -10,7 +10,7 @@
   align-items: center;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  z-index: 1000;
+  z-index: 9999;
 }
 
 /* 翻译弹层样式 */
@@ -27,7 +27,7 @@
   border-radius: 8px;
   width: 350px;
   max-height: 500px;
-  z-index: 1000;
+  z-index: 9999;
   cursor: move;
   line-height: 1.5;
   overflow-y: auto;
