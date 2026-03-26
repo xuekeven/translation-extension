@@ -24,6 +24,8 @@ mindmap
       第三方 REST API
     样式
       CSS3
+    目录
+      src/ 源码
 ```
 
 ---
@@ -43,9 +45,9 @@ mindmap
 | 能力 | 用途 |
 |------|------|
 | `manifest_version: 3` | 使用 MV3 清单格式 |
-| `content_scripts` | 向所有页面注入 `content.js` 与 `styles.css` |
-| `background.service_worker` | `background.js` 处理翻译与缓存 |
-| `action.default_popup` | 工具栏图标打开 `popup.html` |
+| `content_scripts` | 向所有页面注入 `src/content.js` 与 `src/styles/content.css` |
+| `background.service_worker` | `src/background.js` 处理翻译与缓存 |
+| `action.default_popup` | 工具栏图标打开 `src/popup/popup.html` |
 | `permissions`：`storage`、`activeTab` | 同步/本地存储；与当前标签交互 |
 | `host_permissions` | 允许 `fetch` 访问有道、Google、百度等域名 |
 | `chrome.runtime.sendMessage` / `onMessage` | 内容脚本 ⟷ 后台、弹出页 ⟷ 内容脚本 |
@@ -54,13 +56,13 @@ mindmap
 
 - 扩展页 `chrome://extensions/` → 「检查视图」可打开 **Service Worker** 的 DevTools（后台脚本）。
 - 在网页上 F12 → **Console** 查看内容脚本日志。
-- 弹出页右键 →「检查」调试 `popup.js`。
+- 弹出页右键 →「检查」调试 `src/popup/popup.js`。
 
 ---
 
 ## 2. JavaScript（原生）
 
-**简介**：逻辑分布在 `content.js`、`background.js`、`popup.js`，使用 `async/await`、`fetch`、Promise、`chrome.*` API 回调等。
+**简介**：逻辑分布在 `src/content.js`、`src/background.js`、`src/popup/popup.js`，使用 `async/await`、`fetch`、Promise、`chrome.*` API 回调等。
 
 | 资源 | 地址 |
 |------|------|
@@ -84,7 +86,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ## 3. HTML & CSS
 
-**简介**：`popup.html` 为扩展弹出页结构；`styles.css` 注入网页，控制 `.translate-icon`、`.translate-popup` 等。无 CSS 预处理器。
+**简介**：`src/popup/popup.html` 为弹出页结构，样式在 `popup.css`；`src/styles/content.css` 注入网页，控制 `.translate-icon`、`.translate-popup` 等。无 CSS 预处理器。
 
 | 资源 | 地址 |
 |------|------|
@@ -131,7 +133,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ## 7. 第三方翻译与词典服务（HTTP API）
 
-以下为代码中**实际请求**的服务（实现见 `background.js`）。
+以下为代码中**实际请求**的服务（实现见 `src/background.js`）。
 
 ### 7.1 有道（网页词典 JSON）
 
@@ -152,7 +154,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ### 7.3 百度翻译 API
 
-**简介**：通用文本翻译；签名 `sign = MD5(appid + query + salt + secretKey)`，项目内使用 **内联 MD5 实现**（`background.js` 文件前部）。
+**简介**：通用文本翻译；签名 `sign = MD5(appid + query + salt + secretKey)`，项目内使用 **内联 MD5 实现**（`src/background.js` 文件前部）。
 
 | 资源 | 地址 |
 |------|------|
@@ -160,18 +162,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ---
 
-## 8. 清单中声明但未接入主流程的项
-
-| 项 | 说明 |
-|----|------|
-| `https://api.dictionaryapi.dev/` | `host_permissions` 含此域，当前 **未在代码中调用** |
-| `crypto-js.min.js` | 声明为 `web_accessible_resources`，仓库中 **未见该文件**，签名使用内联 MD5 |
-
-若后续删除或接入，请同步更新 `manifest.json` 并测试百度签名与扩展打包。
-
----
-
-## 9. 未采用的技术（说明）
+## 8. 未采用的技术（说明）
 
 | 技术 | 说明 |
 |------|------|
@@ -184,7 +175,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ---
 
-## 10. 开发与命令行（参考）
+## 9. 开发与命令行（参考）
 
 本仓库**无** npm 脚本。日常开发流程依赖 Chrome 与文件保存后刷新扩展：
 
@@ -200,13 +191,13 @@ git diff
 
 ---
 
-## 11. 相关流程简图（消息与存储）
+## 10. 相关流程简图（消息与存储）
 
 ```mermaid
 sequenceDiagram
   participant U as 用户
-  participant C as content.js
-  participant B as background.js
+  participant C as src/content.js
+  participant B as src/background.js
   participant S as storage
   participant N as 网络 API
   U->>C: 选中文本 mouseup

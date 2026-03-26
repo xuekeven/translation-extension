@@ -31,13 +31,13 @@
 ```mermaid
 flowchart LR
   subgraph page["网页标签页"]
-    CS["content.js\n内容脚本"]
+    CS["src/content.js\n内容脚本"]
     UI["浮层：图标 / 弹窗"]
     CS --> UI
   end
   subgraph ext["扩展"]
-    POP["popup.html / popup.js\n设置与密钥"]
-    BG["background.js\nService Worker"]
+    POP["src/popup/\n设置与密钥"]
+    BG["src/background.js\nService Worker"]
   end
   POP -->|chrome.storage.sync| BG
   CS -->|sendMessage: translate / playAudio| BG
@@ -87,7 +87,7 @@ flowchart TD
 |------|------|
 | 仅英文单词（`^[a-zA-Z]+$`） | 有道词典 JSON，失败时回退为百度+Google 翻译说明 |
 | 短语/句子 | 需配置 API：同时尝试百度与 Google，未配置的引擎会显示红色提示文案 |
-| 排除规则 | 纯数字、中文、常见 URL/路径形态等不会被当作可翻译文本（见 `content.js` 中 `isTranslateable`） |
+| 排除规则 | 纯数字、中文、常见 URL/路径形态等不会被当作可翻译文本（见 `src/content.js` 中 `isTranslateable`） |
 
 ---
 
@@ -130,21 +130,40 @@ flowchart TD
 
 ## 项目结构（主要文件）
 
-| 文件 | 作用 |
+```
+chrome-translation-extension/
+├── manifest.json              # 扩展清单（入口指向 src/）
+├── LICENSE
+├── README.md
+├── TechStack.md
+└── src/
+    ├── background.js            # Service Worker：翻译、缓存、音频
+    ├── content.js             # 内容脚本：选区、浮层、消息
+    ├── icons/                 # 工具栏图标（紫渐变「译」）
+    ├── key.js                 # 可选本地示例（已加入 .gitignore）
+    ├── styles/
+    │   └── content.css        # 注入页面的图标与弹层样式
+    └── popup/
+        ├── popup.html
+        ├── popup.css          # 弹出页专用样式
+        └── popup.js
+```
+
+| 路径 | 作用 |
 |------|------|
-| `manifest.json` | 扩展清单：MV3、权限、内容脚本、后台脚本 |
-| `content.js` | 选区检测、图标/弹层 UI、与后台消息收发、音频播放解码 |
-| `background.js` | 翻译路由、有道/百度/Google 请求、MD5 签名、缓存与音频拉取 |
-| `popup.html` / `popup.js` | 设置界面与 `storage` 读写 |
-| `styles.css` | 注入页面的图标与弹层样式 |
-| `key.js` | 仅占位/示例注释，**请勿将真实密钥提交仓库** |
+| `manifest.json` | MV3 清单、权限、`src/` 下各入口 |
+| `src/content.js` | 选区检测、图标/弹层 UI、与后台消息收发、音频播放解码 |
+| `src/background.js` | 翻译路由、有道/百度/Google 请求、MD5 签名、缓存与音频拉取 |
+| `src/popup/popup.html` · `popup.js` · `popup.css` | 设置界面与 `storage` 读写 |
+| `src/styles/content.css` | 注入网页的 `.translate-icon` / `.translate-popup` 等 |
+| `src/key.js` | 仅占位/示例注释，**勿提交真实密钥**（见 `.gitignore`） |
 
 ---
 
 ## 注意事项
 
 - **安全**：勿将真实 API 密钥写入代码或提交到 Git；使用弹出页保存或本地环境变量（若日后接入构建流程）。
-- **manifest 中的预留项**：清单里声明了 `https://api.dictionaryapi.dev/` 与 `crypto-js.min.js` 等资源，当前主流程代码**未使用** dictionaryapi；MD5 在 `background.js` 内联实现。若清理清单，请同步删除未用权限与资源，并完整回归测试。
+- **清单与权限**：当前 `host_permissions` 仅包含有道、Google、百度翻译所需域名；MD5 在 `src/background.js` 内联实现。
 - **百度接口**：代码中使用 `http://api.fanyi.baidu.com/...`（明文 HTTP）。生产环境建议按百度官方文档改用 **HTTPS** 端点（若提供），并关注区域与配额限制。
 
 ---

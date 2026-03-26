@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>翻译设置</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <div class="popup-header__icon" aria-hidden="true">译</div>
+      <div>
+        <h1 class="popup-title">英文到中文翻译</h1>
+        <p class="popup-subtitle">选中网页中的英文即可查词或翻译为简体中文</p>
+      </div>
+    </header>
+
+    <section class="card" aria-labelledby="heading-behavior">
+      <h2 id="heading-behavior" class="card__title">行为</h2>
+      <div class="setting-row">
+        <div class="setting-row__text">
+          <span class="setting-row__label">启用翻译</span>
+          <span class="setting-row__hint">关闭后不再显示「译」按钮与结果浮层</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="enableSwitch" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div class="setting-row__text">
+          <span class="setting-row__label">直接显示翻译结果</span>
+          <span class="setting-row__hint">选中后立刻弹出结果，跳过「译」按钮</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="directTranslateSwitch">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="heading-api">
+      <h2 id="heading-api" class="card__title">API 密钥</h2>
+      <p class="card__lead">翻译短语和句子需配置 <strong>Google</strong> 或者 <strong>百度</strong> 密钥；密钥只存在本地。</p>
+
+      <div class="field">
+        <label class="field__label" for="googleApiKey">Google API Key</label>
+        <div class="input-wrap">
+          <input type="text" class="secret-input input--masked" id="googleApiKey" placeholder="Cloud Translation API 密钥" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
+          <button type="button" class="toggle-visibility" data-target="googleApiKey" aria-label="显示或隐藏 Google API Key" title="显示/隐藏">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path class="icon-eye" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+              <circle class="icon-eye" cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="baiduAppId">百度翻译 App ID</label>
+        <div class="input-wrap">
+          <input type="text" class="secret-input input--masked" id="baiduAppId" placeholder="开放平台应用 App ID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
+          <button type="button" class="toggle-visibility" data-target="baiduAppId" aria-label="显示或隐藏百度 App ID" title="显示/隐藏">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path class="icon-eye" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+              <circle class="icon-eye" cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="baiduKey">百度翻译 Key</label>
+        <div class="input-wrap">
+          <input type="text" class="secret-input input--masked" id="baiduKey" placeholder="开放平台应用密钥" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
+          <button type="button" class="toggle-visibility" data-target="baiduKey" aria-label="显示或隐藏百度 Key" title="显示/隐藏">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path class="icon-eye" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+              <circle class="icon-eye" cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <button type="button" id="saveButton" class="btn-primary">保存密钥</button>
+    <p id="saveMessage" class="save-message" role="status" aria-live="polite"></p>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
