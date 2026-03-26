@@ -241,13 +241,28 @@ function getTrLine(tr) {
   }).filter(Boolean).join(' ');
 }
 
+function getTrLines(tr) {
+  const entries = Array.isArray(tr?.tr) ? tr.tr : [];
+  const lines = entries.map(item => {
+    const segs = item?.l?.i;
+    if (!Array.isArray(segs) || segs.length === 0) return '';
+    return segs.map(seg => {
+      if (typeof seg === 'string') return stripYoudaoSpam(seg);
+      return stripYoudaoSpam(seg?.i || '');
+    }).filter(Boolean).join(' ');
+  }).filter(Boolean);
+  if (lines.length > 0) return lines;
+  const fallback = getTrLine(tr);
+  return fallback ? [fallback] : [];
+}
+
 // 添加缓存相关函数
 async function getCachedWord(word) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
       const cachedItem = cache[word];
-      const CACHE_TEMPLATE_VERSION = 2;
+      const CACHE_TEMPLATE_VERSION = 3;
       
       if (cachedItem) {
         // 检查缓存是否过期（例如24小时）
@@ -276,7 +291,7 @@ async function cacheWord(word, data) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
-      const CACHE_TEMPLATE_VERSION = 2;
+      const CACHE_TEMPLATE_VERSION = 3;
       // 添加时间戳，用于后续可能的缓存过期处理
       cache[word] = {
         data: {
@@ -368,19 +383,19 @@ async function fetchWordDefinition(word, tabId) {
     `;
 
     if (data.ec?.word?.[0]?.trs?.length > 0) {
-      const trs = data.ec.word[0].trs.map((tr) => {
-        const line = getTrLine(tr);
-        if (!line) return '';
-        const match = line.match(/^([a-z]{1,12}[.．])\s*(.*)$/i);
-        if (match && match[2]) {
-          return `
-            <div class="word-line">
-              <span class="word-pos">${match[1]}</span>
-              <span class="word-def">${match[2]}</span>
-            </div>
-          `;
-        }
-        return `<div class="word-line"><span class="word-def">${line}</span></div>`;
+      const trs = data.ec.word[0].trs.flatMap((tr) => {
+        return getTrLines(tr).map(line => {
+          const match = line.match(/^([a-z]{1,12}[.．])\s*(.*)$/i);
+          if (match && match[2]) {
+            return `
+              <div class="word-line">
+                <span class="word-pos">${match[1]}</span>
+                <span class="word-def">${match[2]}</span>
+              </div>
+            `;
+          }
+          return `<div class="word-line"><span class="word-def">${line}</span></div>`;
+        });
       }).filter(Boolean);
       if (trs.length > 0) {
         result += `
@@ -414,6 +429,55 @@ async function fetchWordDefinition(word, tabId) {
       }
     }
 
+    if (data.rel_word?.rels && Array.isArray(data.rel_word.rels) && data.rel_word.rels.length > 0) {
+      const relLines = data.rel_word.rels.flatMap(rel => {
+        const pos = stripYoudaoSpam(rel?.rel?.pos || '');
+        const words = Array.isArray(rel?.rel?.words) ? rel.rel.words : [];
+        return words.map(w => {
+          const wword = stripYoudaoSpam(w?.word || '');
+          const tran = stripYoudaoSpam(w?.tran || '');
+          if (!wword && !tran) return '';
+          return `
+            <div class="word-line">
+              ${pos ? `<span class="word-pos">${pos}</span>` : ''}
+              <span class="word-def">${wword}${tran ? ` ${tran}` : ''}</span>
+            </div>
+          `;
+        });
+      }).filter(Boolean);
+      if (relLines.length > 0) {
+        result += `
+          <div class="word-card">
+            <div class="word-card__title">同根词</div>
+            ${relLines.join('')}
+          </div>
+        `;
+      }
+    }
+
+    if (data.syno?.synos && Array.isArray(data.syno.synos) && data.syno.synos.length > 0) {
+      const synoLines = data.syno.synos.map(syno => {
+        const pos = stripYoudaoSpam(syno?.syno?.pos || '');
+        const words = (syno?.syno?.ws || []).map(w => stripYoudaoSpam(w?.w || '')).filter(Boolean);
+        const tran = stripYoudaoSpam(syno?.syno?.tran || '');
+        if (!words.length && !tran) return '';
+        return `
+          <div class="word-line">
+            ${pos ? `<span class="word-pos">${pos}</span>` : ''}
+            <span class="word-def">${words.join('，')}${tran ? `；${tran}` : ''}</span>
+          </div>
+        `;
+      }).filter(Boolean);
+      if (synoLines.length > 0) {
+        result += `
+          <div class="word-card">
+            <div class="word-card__title">同义词</div>
+            ${synoLines.join('')}
+          </div>
+        `;
+      }
+    }
+
     if (data.blng_sents_part?.['sentence-pair']?.length > 0) {
       const examples = data.blng_sents_part['sentence-pair'].map(pair => {
         const en = stripYoudaoSpam(pair.sentence);
@@ -441,7 +505,12 @@ async function fetchWordDefinition(word, tabId) {
         const hw = stripYoudaoSpam(phr?.phr?.headword?.l?.i || '');
         const tr = stripYoudaoSpam(phr?.phr?.trs?.[0]?.tr?.l?.i || '');
         if (!hw && !tr) return '';
-        return `<span class="phrase-chip">${hw || tr}</span>`;
+        return `
+          <span class="phrase-chip">
+            ${hw ? `<span class="phrase-chip__hw">${hw}</span>` : ''}
+            ${tr ? `<span class="phrase-chip__tr">${tr}</span>` : ''}
+          </span>
+        `;
       }).filter(Boolean);
       if (phrases.length > 0) {
         result += `
@@ -485,22 +554,18 @@ async function translateText(text, tabId, extra = '') {
     chrome.tabs.sendMessage(tabId, {
       action: "updateTranslation",
       translation: `
-        <div class="sentence-layout">
+        <div class="sentence-layout sentence-layout--results-only">
           ${extra}
           <div class="sentence-card">
-            <div class="sentence-label-row"><span class="sentence-label">ORIGINAL TEXT</span></div>
             <div class="sentence-content">${text}</div>
           </div>
-          <div class="sentence-card sentence-card--translation">
-            <div class="sentence-label-row"><span class="sentence-label">TRANSLATIONS</span></div>
-            <div class="sentence-platform-block">
-              <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
-              <div class="sentence-content sentence-content--pending">正在翻译...</div>
-            </div>
-            <div class="sentence-platform-block">
-              <div class="sentence-result"><span class="engine-badge engine-badge--google">G</span><span class="engine-name">Google Translate</span></div>
-              <div class="sentence-content sentence-content--pending">正在翻译...</div>
-            </div>
+          <div class="sentence-platform-block">
+            <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
+            <div class="sentence-content sentence-content--pending">正在翻译...</div>
+          </div>
+          <div class="sentence-platform-block">
+            <div class="sentence-result"><span class="engine-badge engine-badge--google">G</span><span class="engine-name">Google Translate</span></div>
+            <div class="sentence-content sentence-content--pending">正在翻译...</div>
           </div>
         </div>
       `,
@@ -528,22 +593,18 @@ async function translateText(text, tabId, extra = '') {
     chrome.tabs.sendMessage(tabId, {
       action: "updateTranslation",
       translation: `
-        <div class="sentence-layout">
+        <div class="sentence-layout sentence-layout--results-only">
           ${extra}
           <div class="sentence-card">
-            <div class="sentence-label-row"><span class="sentence-label">ORIGINAL TEXT</span></div>
             <div class="sentence-content">${text}</div>
           </div>
-          <div class="sentence-card sentence-card--translation">
-            <div class="sentence-label-row"><span class="sentence-label">TRANSLATIONS</span></div>
-            <div class="sentence-platform-block">
-              <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
-              <div class="sentence-content">${baiduResult}</div>
-            </div>
-            <div class="sentence-platform-block">
-              <div class="sentence-result"><span class="engine-badge engine-badge--google">G</span><span class="engine-name">Google Translate</span></div>
-              <div class="sentence-content">${googleResult}</div>
-            </div>
+          <div class="sentence-platform-block">
+            <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
+            <div class="sentence-content">${baiduResult}</div>
+          </div>
+          <div class="sentence-platform-block">
+            <div class="sentence-result"><span class="engine-badge engine-badge--google">G</span><span class="engine-name">Google Translate</span></div>
+            <div class="sentence-content">${googleResult}</div>
           </div>
         </div>
       `,

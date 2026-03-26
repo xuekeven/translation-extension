@@ -21,7 +21,7 @@
   position: fixed;
   width: 400px;
   max-width: 400px;
-  max-height: 500px;
+  max-height: min(500px, calc(100vh - 10px));
   background: #ffffff;
   border: 1px solid #d8e0e8;
   border-radius: 18px;
@@ -30,23 +30,23 @@
   font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
   z-index: 2147483647;
   cursor: move;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .translate-popup__body {
-  padding: 16px;
-  max-height: 500px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  padding: 16px 16px 8px;
+  max-height: none;
+  overflow: visible;
   scrollbar-width: thin;
   scrollbar-color: rgba(113, 124, 130, 0.35) transparent;
 }
 
-.translate-popup__body::-webkit-scrollbar {
+.translate-popup::-webkit-scrollbar {
   width: 7px;
 }
 
-.translate-popup__body::-webkit-scrollbar-thumb {
+.translate-popup::-webkit-scrollbar-thumb {
   background: rgba(113, 124, 130, 0.35);
   border-radius: 7px;
 }
@@ -89,7 +89,7 @@
 }
 
 .word-hero__meta {
-  margin-top: 0;
+  margin-top: 7px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -101,7 +101,7 @@
   background: #d3e4fe;
   color: #3e4f67;
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 8px;
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
@@ -122,7 +122,7 @@
   background: #eef3f7;
   color: #44546a;
   border-radius: 11px;
-  padding: 4px 10px;
+  padding: 6px 10px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -196,7 +196,9 @@
 }
 
 .phrase-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   padding: 5px 9px;
   border-radius: 9px;
   background: #e8eff3;
@@ -205,10 +207,24 @@
   font-weight: 600;
 }
 
+.phrase-chip__hw {
+  color: #334155;
+  font-weight: 700;
+}
+
+.phrase-chip__tr {
+  color: #64748b;
+  font-weight: 500;
+}
+
 /* 句子模式 */
 .sentence-layout {
   display: grid;
   gap: 10px;
+}
+
+.sentence-layout--results-only {
+  margin-top: 2px;
 }
 
 .sentence-card {
@@ -228,10 +244,6 @@
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.35);
   padding: 8px 10px;
-  margin-bottom: 8px;
-}
-
-.sentence-platform-block:last-child {
   margin-bottom: 0;
 }
 
@@ -251,7 +263,8 @@
 
 .sentence-content {
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.45;
+  font-weight: 500;
   color: #2f3a41;
   user-select: text;
   cursor: text;
