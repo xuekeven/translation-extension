@@ -86,7 +86,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ## 3. HTML & CSS
 
-**简介**：`src/popup/popup.html` 为弹出页结构，样式在 `popup.css`；`src/styles/content.css` 注入网页，控制 `.translate-icon`、`.translate-popup` 等。无 CSS 预处理器。
+**简介**：`src/popup/popup.html` 为弹出页结构，样式在 `popup.css`；`src/styles/content.css` 注入网页，控制 `.translate-icon`、`.translate-popup` 等。无 CSS 预处理器。结果浮层采用「外层限高 + 内层滚动」结构，并在 `src/content.js` 中执行视口内约束（clamp）。
 
 | 资源 | 地址 |
 |------|------|
@@ -118,6 +118,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 - `chrome.storage.sync.get(keys, callback)`
 - `chrome.storage.sync.set(object, callback)`
 - `chrome.storage.local.get` / `set`（同上）
+- `wordCache.templateVersion`（模板版本迁移时淘汰旧缓存）
 
 ---
 
@@ -137,7 +138,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ### 7.1 有道（网页词典 JSON）
 
-**用途**：纯英文单词的释义、音标、例句等 HTML 拼装；发音 URL 为 `dict.youdao.com/dictvoice`。
+**用途**：纯英文单词的释义、词形变化、同根词、同义词、例句、常见搭配（含译文）等 HTML 拼装；发音 URL 为 `dict.youdao.com/dictvoice`。
 
 **说明**：非官方公开文档的固定 SDK，依赖 URL 与返回 JSON 结构；变更可能导致解析失败，届时需适配。
 
@@ -208,6 +209,14 @@ sequenceDiagram
   B->>S: 写 wordCache（可选）
   B->>C: updateTranslation
   C->>U: 显示浮层
+```
+
+```mermaid
+flowchart TD
+  A[create/update 浮层] --> B[计算 popup 尺寸]
+  B --> C[clampPopupToViewport]
+  C --> D[拖动中持续 clamp]
+  D --> E[保证不超出可视区域]
 ```
 
 ---
