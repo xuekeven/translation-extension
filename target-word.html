@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GlassLens Translation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary-fixed-variant": "#5b5672",
+              "surface-container-highest": "#d9e4ea",
+              "tertiary": "#605c78",
+              "secondary-fixed-dim": "#c5d6f0",
+              "surface-bright": "#f7f9fb",
+              "surface-container": "#e8eff3",
+              "on-error-container": "#752121",
+              "secondary-dim": "#44546a",
+              "error": "#9f403d",
+              "secondary": "#506076",
+              "on-tertiary": "#fcf7ff",
+              "secondary-fixed": "#d3e4fe",
+              "primary": "#005ac2",
+              "on-primary": "#f7f7ff",
+              "secondary-container": "#d3e4fe",
+              "surface-dim": "#cfdce3",
+              "tertiary-dim": "#54506b",
+              "on-secondary-container": "#435368",
+              "outline-variant": "#a9b4b9",
+              "primary-container": "#d8e2ff",
+              "primary-fixed-dim": "#c3d4ff",
+              "surface-tint": "#005ac2",
+              "primary-dim": "#004fab",
+              "surface-container-lowest": "#ffffff",
+              "on-background": "#2a3439",
+              "outline": "#717c82",
+              "surface-container-high": "#e1e9ee",
+              "on-primary-fixed-variant": "#0057bd",
+              "inverse-on-surface": "#9a9d9f",
+              "on-error": "#fff7f6",
+              "on-secondary": "#f7f9ff",
+              "surface-container-low": "#f0f4f7",
+              "on-primary-container": "#004eaa",
+              "tertiary-fixed-dim": "#d4cdee",
+              "surface": "#f7f9fb",
+              "primary-fixed": "#d8e2ff",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "error-container": "#fe8983",
+              "error-dim": "#4e0309",
+              "surface-variant": "#d9e4ea",
+              "tertiary-container": "#e3dbfd",
+              "inverse-primary": "#4d8eff",
+              "inverse-surface": "#0b0f10",
+              "on-tertiary-container": "#514d68",
+              "on-primary-fixed": "#003c86",
+              "background": "#f7f9fb",
+              "on-secondary-fixed": "#314055",
+              "on-surface-variant": "#566166",
+              "on-tertiary-fixed": "#3e3a54",
+              "tertiary-fixed": "#e3dbfd",
+              "on-surface": "#2a3439"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-effect {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-slate-200 flex items-center justify-center min-h-screen p-6">
+<!-- Main Extension Shell -->
+<div class="w-full max-w-[420px] bg-surface-container-lowest rounded-2xl shadow-[0px_10px_40px_rgba(42,52,57,0.08)] overflow-hidden flex flex-col glass-effect relative">
+<!-- Header with only Close Button -->
+<div class="absolute top-2 right-2 z-10">
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors p-2 rounded-lg active:scale-95 duration-200">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto max-h-[500px] p-6 pt-8 space-y-4">
+<!-- Hero Word Section -->
+<section class="space-y-1">
+<div class="flex justify-between items-start">
+<div>
+<h1 class="text-[2.5rem] font-extrabold text-on-surface tracking-tight leading-tight">take</h1>
+<div class="flex items-center gap-3 mt-0.5">
+<span class="text-on-surface-variant text-sm font-medium">/teɪk/</span>
+<button class="flex items-center justify-center w-8 h-8 rounded-full bg-secondary-fixed text-on-secondary-fixed hover:bg-primary hover:text-white transition-all duration-300">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">volume_up</span>
+</button>
+</div>
+</div>
+<div class="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-[11px] font-bold tracking-wider">
+                    EN → ZH
+                </div>
+</div>
+</section>
+<!-- Meaning Bento Grid -->
+<section class="grid grid-cols-1 gap-3">
+<!-- Verb Section -->
+<div class="bg-surface-container-low rounded-xl transition-all hover:bg-surface-container-high border border-outline-variant/10 p-3 space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-bold text-primary uppercase tracking-widest bg-primary-container px-2 py-0.5 rounded">v.</span>
+<span class="text-sm font-semibold text-on-surface">Action &amp; Possession</span>
+</div>
+<div class="space-y-3">
+<div class="relative pl-4 border-l-2 border-primary/20">
+<p class="text-on-surface font-medium text-[0.9375rem]">拿，取；带去</p>
+<p class="text-on-surface-variant text-sm mt-1 italic leading-relaxed">"Please take your umbrella with you."</p>
+</div>
+<div class="relative pl-4 border-l-2 border-primary/20">
+<p class="text-on-surface font-medium text-[0.9375rem]">乘坐（交通工具）</p>
+<p class="text-on-surface-variant text-sm mt-1 italic leading-relaxed">"I usually take the bus to work."</p>
+</div>
+</div>
+</div>
+<!-- Noun Section -->
+<div class="bg-surface-container-low rounded-xl transition-all hover:bg-surface-container-high border border-outline-variant/10 p-3 space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-bold text-tertiary uppercase tracking-widest bg-tertiary-container px-2 py-0.5 rounded">n.</span>
+<span class="text-sm font-semibold text-on-surface">Perspective</span>
+</div>
+<div class="relative pl-4 border-l-2 border-tertiary/20">
+<p class="text-on-surface font-medium text-[0.9375rem]">看法，见解</p>
+<p class="text-on-surface-variant text-sm mt-1 italic leading-relaxed">"What's your take on the new policy?"</p>
+</div>
+</div>
+<!-- Phrases / Quick Chips -->
+<div class="p-3 space-y-2">
+<h3 class="text-[10px] font-bold text-outline uppercase tracking-[0.2em] px-1">Common Phrases</h3>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1.5 bg-surface-container rounded-lg text-xs font-medium text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer">take off</span>
+<span class="px-3 py-1.5 bg-surface-container rounded-lg text-xs font-medium text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer">take over</span>
+<span class="px-3 py-1.5 bg-surface-container rounded-lg text-xs font-medium text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer">take place</span>
+<span class="px-3 py-1.5 bg-surface-container rounded-lg text-xs font-medium text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer">take in</span>
+</div>
+</div>
+</section>
+</main>
+</div>
+</body></html>

@@ -222,17 +222,43 @@ function isEnglishWord(text) {
   return /^[a-zA-Z]+$/.test(text);
 }
 
+function stripYoudaoSpam(str) {
+  if (str == null) return '';
+  const text = String(str).trim();
+  if (!text) return '';
+  if (/we\s+are\s+pirates|stolen\s+from\s+youdao|these\s+data\s+are\s+stolen/i.test(text)) {
+    return '';
+  }
+  return text;
+}
+
+function getTrLine(tr) {
+  const segs = tr?.tr?.[0]?.l?.i;
+  if (!Array.isArray(segs) || segs.length === 0) return '';
+  return segs.map(seg => {
+    if (typeof seg === 'string') return stripYoudaoSpam(seg);
+    return stripYoudaoSpam(seg?.i || '');
+  }).filter(Boolean).join(' ');
+}
+
 // 添加缓存相关函数
 async function getCachedWord(word) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
       const cachedItem = cache[word];
+      const CACHE_TEMPLATE_VERSION = 2;
       
       if (cachedItem) {
         // 检查缓存是否过期（例如24小时）
         const isExpired = Date.now() - cachedItem.timestamp > 24 * 60 * 60 * 1000;
+        const isOldTemplate = (cachedItem.templateVersion || 0) < CACHE_TEMPLATE_VERSION;
         if (isExpired) {
+          delete cache[word];
+          chrome.storage.local.set({ wordCache: cache });
+          resolve(null);
+        } else if (isOldTemplate) {
+          // 新版 UI 上不复用旧模板缓存，避免白字/旧结构导致显示异常
           delete cache[word];
           chrome.storage.local.set({ wordCache: cache });
           resolve(null);
@@ -250,12 +276,14 @@ async function cacheWord(word, data) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
+      const CACHE_TEMPLATE_VERSION = 2;
       // 添加时间戳，用于后续可能的缓存过期处理
       cache[word] = {
         data: {
           definition: data,
           audio: {}
         },
+        templateVersion: CACHE_TEMPLATE_VERSION,
         timestamp: Date.now()
       };
       // 限制缓存大小，最多存储100个单词
@@ -306,145 +334,128 @@ async function fetchWordDefinition(word, tabId) {
     // 获取用户偏好的音标显示方式
     const phoneticPreference = await getPhoneticPreference();
     
-    // 生成翻译结果 HTML
+    // 生成翻译结果 HTML（对齐 target-word 风格）
     let result = `
-      <div style="display: flex; align-items: center; margin-bottom: 5px;">
-        <h2 style="font-size: 18px; color: white; margin: 0;">${word}</h2>
+      <section class="word-hero">
+        <div class="word-hero__top">
+          <h1 class="word-hero__title">${word}</h1>
+        </div>
+        <div class="word-hero__meta">
     `;
-    
-    // 添加音标按钮（如果有）
+
     if (data.ec?.word?.[0]) {
       const wordInfo = data.ec.word[0];
 
       const flagSwitcher = `
-        <button class="flagSwitcher" data-current="${phoneticPreference}" style="
-          background: none;
-          border: none;
-          color: white;
-          padding: 2px 5px;
-          text-align: center;
-          display: inline-block;
-          font-size: 12px;
-          margin-left: 10px;
-          cursor: pointer;
-        ">${phoneticPreference === 'uk' ? '🇬🇧' : '🇺🇸'}</button>
+        <button class="flagSwitcher word-flag" data-current="${phoneticPreference}">${phoneticPreference === 'uk' ? '🇬🇧' : '🇺🇸'}</button>
       `;
       const ukButton = `
-        <button class="playButton phoneticButton" data-word="${word}" data-type="1" data-phonetic="uk" style="
-          ${phoneticPreference === 'us' ? 'display: none;' : ''}
-        ">/${wordInfo.ukphone || 'n/a'}/</button>
+        <button class="playButton phoneticButton ${phoneticPreference === 'us' ? 'is-hidden' : ''}" data-word="${word}" data-type="1" data-phonetic="uk">/${wordInfo.ukphone || 'n/a'}/</button>
       `;
 
       const usButton = `
-        <button class="playButton phoneticButton" data-word="${word}" data-type="2" data-phonetic="us" style="
-          ${phoneticPreference === 'uk' ? 'display: none;' : ''}
-        ">/${wordInfo.usphone || 'n/a'}/</button>
+        <button class="playButton phoneticButton ${phoneticPreference === 'uk' ? 'is-hidden' : ''}" data-word="${word}" data-type="2" data-phonetic="us">/${wordInfo.usphone || 'n/a'}/</button>
       `;
 
       result += flagSwitcher + ukButton + usButton;
     }
 
-    // 添加查看更多按钮
     result += `
-        <button class="moreButton" data-word="${word}">查看更多</button>
-      </div>
+          <button class="moreButton" data-word="${word}">查看更多</button>
+        </div>
+      </section>
+      <section class="word-sections">
     `;
 
-    // 2. 词性和释义
     if (data.ec?.word?.[0]?.trs?.length > 0) {
-      result += `
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #ddd; font-size: 12px;">释义</strong>
-          <ul style="list-style-type: none; padding-left: 10px; margin: 5px 0;">
-            ${data.ec.word[0].trs.map(tr => `<li style="color: white; margin: 3px 0; font-size: 12px;">${tr.tr[0].l.i[0] ? `<span style="color: #white;">${tr.tr[0].l.i[0]}</span> ` : ''}</li>`).join('')}
-          </ul>
-        </div>
-      `;
-    }
-
-    // 3. 词形变化
-    if (data.ec?.word?.[0]?.wfs?.length > 0) {
-      result += `
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #ddd; font-size: 12px;">词形变化</strong>
-          <ul style="list-style-type: none; padding-left: 10px; margin: 5px 0;">
-            ${data.ec.word[0].wfs.map(wf => `<li style="color: white; font-size: 12px;"><span style="color: #white;">${wf.wf.name}</span> <span style="color: #white;">${wf.wf.value}</span></li>`).join('')}
-          </ul>
-        </div>
-      `;
-    }
-
-    // 4. 同根词
-    if (data.rel_word?.rels && Array.isArray(data.rel_word.rels) && data.rel_word.rels.length > 0) {
-      result += `
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #ddd; font-size: 12px;">同根词</strong>
-          <div style="list-style-type: none; padding-left: 10px; margin: 5px 0;">
-            ${data.rel_word.rels.map(rel => `
-              <div style="color: white; font-size: 12px;">
-                ${(rel.rel.words || []).map(w => `
-                  <div>
-                    <span style="color: #white;">${rel.rel.pos || ''}</span>
-                    <span style="color: #white;">${w?.word || ''}</span>
-                    <span style="color: #white;">${w?.tran}</span>
-                  </div>`).join('')}
-              </div>
-            `).join('')}
+      const trs = data.ec.word[0].trs.map((tr) => {
+        const line = getTrLine(tr);
+        if (!line) return '';
+        const match = line.match(/^([a-z]{1,12}[.．])\s*(.*)$/i);
+        if (match && match[2]) {
+          return `
+            <div class="word-line">
+              <span class="word-pos">${match[1]}</span>
+              <span class="word-def">${match[2]}</span>
+            </div>
+          `;
+        }
+        return `<div class="word-line"><span class="word-def">${line}</span></div>`;
+      }).filter(Boolean);
+      if (trs.length > 0) {
+        result += `
+          <div class="word-card">
+            <div class="word-card__title">释义</div>
+            ${trs.join('')}
           </div>
-        </div>
-      `;
+        `;
+      }
     }
 
-    // 5. 同义词/近义词
-    if (data.syno?.synos?.length > 0) {
-      result += `
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #ddd; font-size: 12px;">同义词</strong>
-          <ul style="list-style-type: none; padding-left: 10px; margin: 5px 0;">
-            ${data.syno.synos.map(syno => `
-              <li style="color: white; font-size: 12px;">
-                <span style="color: #white;">${syno.syno.pos || ''}</span> 
-                <span style="color: #white;">${(syno.syno.ws || []).map(w => w?.w || '').filter(Boolean).join(', ')}</span>
-                ${syno.syno.tran ? `<br><span style="color: #white;"></span> <span style="color: #white;">${syno.syno.tran}</span>` : ''}
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
+    if (data.ec?.word?.[0]?.wfs?.length > 0) {
+      const wfs = data.ec.word[0].wfs.map(wf => {
+        const name = stripYoudaoSpam(wf?.wf?.name || '');
+        const value = stripYoudaoSpam(wf?.wf?.value || '');
+        if (!name && !value) return '';
+        return `
+          <div class="word-line">
+            <span class="word-pos">${name}</span>
+            <span class="word-def">${value}</span>
+          </div>
+        `;
+      }).filter(Boolean);
+      if (wfs.length > 0) {
+        result += `
+          <div class="word-card">
+            <div class="word-card__title">词形变化</div>
+            ${wfs.join('')}
+          </div>
+        `;
+      }
     }
 
-    // 6. 例句
     if (data.blng_sents_part?.['sentence-pair']?.length > 0) {
-      result += `
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #ddd; font-size: 12px;">例句</strong>
-          <ul style="list-style-type: none; padding-left: 10px; margin: 5px 0;">
-            ${data.blng_sents_part['sentence-pair'].map(pair => `
-              <li style="color: white; margin-bottom: 5px; font-size: 12px;">
-                <div><span style="color: #white;">${pair.sentence}</span></div>
-                <div><span style="color: #888;">${pair['sentence-translation']}</span></div>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
+      const examples = data.blng_sents_part['sentence-pair'].map(pair => {
+        const en = stripYoudaoSpam(pair.sentence);
+        const cn = stripYoudaoSpam(pair['sentence-translation']);
+        if (!en && !cn) return '';
+        return `
+          <div class="word-line">
+            <div class="word-example-en">${en}</div>
+            <div class="word-example-cn">${cn}</div>
+          </div>
+        `;
+      }).filter(Boolean);
+      if (examples.length > 0) {
+        result += `
+          <div class="word-card">
+            <div class="word-card__title">例句</div>
+            ${examples.join('')}
+          </div>
+        `;
+      }
     }
 
-    // 7. 词组搭配
     if (data.phrs?.phrs?.length > 0) {
-      result += `
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #ddd; font-size: 12px;">词组搭配</strong>
-          <ul style="list-style-type: none; padding-left: 10px; margin: 5px 0;">
-            ${data.phrs.phrs.map(phr => `
-              <li style="color: white; margin-bottom: 5px; font-size: 12px;">
-                <span style="color: white;">${phr.phr.headword.l.i}</span><span style="color: #white;; padding-left: 5px;">${phr.phr.trs[0].tr.l.i}</span>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
+      const phrases = data.phrs.phrs.map(phr => {
+        const hw = stripYoudaoSpam(phr?.phr?.headword?.l?.i || '');
+        const tr = stripYoudaoSpam(phr?.phr?.trs?.[0]?.tr?.l?.i || '');
+        if (!hw && !tr) return '';
+        return `<span class="phrase-chip">${hw || tr}</span>`;
+      }).filter(Boolean);
+      if (phrases.length > 0) {
+        result += `
+          <div class="word-card">
+            <div class="word-card__title">常见搭配</div>
+            <div class="phrase-chip-wrap">${phrases.join('')}</div>
+          </div>
+        `;
+      }
     }
+
+    result += `
+      </section>
+    `;
 
     // 缓存结
     await cacheWord(word, result);
@@ -458,7 +469,7 @@ async function fetchWordDefinition(word, tabId) {
   } catch (error) {
     console.error('API error:', error);
     // 如果获取单词定义失败，则使用百度和Google翻译单词
-    const extra = "<p style='font-size: 16px; color: white; margin: 0;'>使用网易API获取单词定义时出错。<br>以下是使用百度和Google翻译的结果。</p><br>";
+    const extra = '<p class="sentence-note">有道词典解析失败，以下展示百度与 Google 翻译结果。</p>';
     translateText(word, tabId, extra);
   }
 }
@@ -474,15 +485,24 @@ async function translateText(text, tabId, extra = '') {
     chrome.tabs.sendMessage(tabId, {
       action: "updateTranslation",
       translation: `
-        <p style="font-size: 16px; color: white; margin: 0;">
+        <div class="sentence-layout">
           ${extra}
-          <strong>原文：</strong><br>
-          ${text}<br><br>
-          <strong>百度翻译：</strong><br>
-          正在翻译...<br><br>
-          <strong>Google 翻译：</strong><br>
-          正在翻译...
-        </p>
+          <div class="sentence-card">
+            <div class="sentence-label-row"><span class="sentence-label">ORIGINAL TEXT</span></div>
+            <div class="sentence-content">${text}</div>
+          </div>
+          <div class="sentence-card sentence-card--translation">
+            <div class="sentence-label-row"><span class="sentence-label">TRANSLATIONS</span></div>
+            <div class="sentence-platform-block">
+              <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
+              <div class="sentence-content sentence-content--pending">正在翻译...</div>
+            </div>
+            <div class="sentence-platform-block">
+              <div class="sentence-result"><span class="engine-badge engine-badge--google">G</span><span class="engine-name">Google Translate</span></div>
+              <div class="sentence-content sentence-content--pending">正在翻译...</div>
+            </div>
+          </div>
+        </div>
       `,
       complete: false
     });
@@ -494,29 +514,38 @@ async function translateText(text, tabId, extra = '') {
     if (baiduAppId && baiduKey) {
       baiduResult = await translateWithBaidu(text, baiduAppId, baiduKey);
     } else {
-      baiduResult = "<p style='color: red;'>未设置百度翻译的 App ID 和 Key。请点击右上角的插件设置。</p>";
+      baiduResult = "未设置百度翻译 App ID / Key，请在插件设置中填写。";
     }
 
     // 检查 Google API Key
     if (googleApiKey) {
       googleResult = await translateWithGoogle(text, googleApiKey);
     } else {
-      googleResult = "<p style='color: red;'>未设置 Google API Key。请点击右上角的插件设置。</p>";
+      googleResult = "未设置 Google API Key，请在插件设置中填写。";
     }
 
     // 更新翻译结果
     chrome.tabs.sendMessage(tabId, {
       action: "updateTranslation",
       translation: `
-        <p style="font-size: 16px; color: white; margin: 0;">
+        <div class="sentence-layout">
           ${extra}
-          <strong>原文：</strong><br>
-          <span style="user-select: text; cursor: text;">${text}</span><br><br>
-          <strong>百度翻译：</strong><br>
-          <span style="user-select: text; cursor: text;">${baiduResult}</span><br><br>
-          <strong>Google 翻译：</strong><br>
-          <span style="user-select: text; cursor: text;">${googleResult}</span>
-        </p>
+          <div class="sentence-card">
+            <div class="sentence-label-row"><span class="sentence-label">ORIGINAL TEXT</span></div>
+            <div class="sentence-content">${text}</div>
+          </div>
+          <div class="sentence-card sentence-card--translation">
+            <div class="sentence-label-row"><span class="sentence-label">TRANSLATIONS</span></div>
+            <div class="sentence-platform-block">
+              <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
+              <div class="sentence-content">${baiduResult}</div>
+            </div>
+            <div class="sentence-platform-block">
+              <div class="sentence-result"><span class="engine-badge engine-badge--google">G</span><span class="engine-name">Google Translate</span></div>
+              <div class="sentence-content">${googleResult}</div>
+            </div>
+          </div>
+        </div>
       `,
       complete: true
     });
@@ -527,7 +556,7 @@ async function translateText(text, tabId, extra = '') {
       action: "updateTranslation",
       translation: `
         ${extra}
-        <p style='font-size: 16px; color: white; margin: 0;'>翻译失败，请重试。</p>
+        <p class="sentence-note sentence-note--error">翻译失败，请重试。</p>
       `,
       complete: true
     });

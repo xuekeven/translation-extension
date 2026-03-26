@@ -147,25 +147,12 @@ function createTranslatePopup(text, x, y) {
   translatePopup.style.top = `${y}px`;
   translatePopup.className = 'translate-popup';
 
-  // 创建关闭按钮
-  const closeButton = document.createElement('button');
-  closeButton.className = 'translate-popup-close-button';
-  closeButton.textContent = '×';
-  closeButton.addEventListener('click', () => translatePopup.remove());
-  closeButton.addEventListener('mouseover', function() {
-    this.style.color = 'white';
-  });
-  closeButton.addEventListener('mouseout', function() {
-    this.style.color = 'rgba(255,255,255,0.8)';
-  });
-
-  // 创建内容div
+  // 创建内容容器
   const contentDiv = document.createElement('div');
-  contentDiv.style.lineHeight = '1.4';
+  contentDiv.className = 'translate-popup__body';
   contentDiv.innerHTML = text; // 用 innerHTML 来渲染 HTML
 
   // 组装弹出框
-  translatePopup.appendChild(closeButton);
   translatePopup.appendChild(contentDiv);
   document.body.appendChild(translatePopup);
 
@@ -233,7 +220,7 @@ function translateText(text, x, y) {
   // 创建一个新的弹出框或获取现有的弹出框
   let popup = document.querySelector('.translate-popup');
   if (!popup) {
-    popup = createTranslatePopup("正在翻译...", x, y);
+    popup = createTranslatePopup('<p class="translate-loading">正在翻译...</p>', x, y);
   }
 
   // 不再恢复选区，方便操作、滚动页面
@@ -439,28 +426,9 @@ function updateTranslatePopup(translation, word, complete) {
   let translatePopup = document.querySelector('.translate-popup');
   
   if (!translatePopup) {
-    translatePopup = document.createElement('div');
-    translatePopup.className = 'translate-popup';
-    translatePopup.style.cssText = `
-      text-align: left;
-      position: fixed;
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.8);
-      border-radius: 8px;
-      width: 350px;
-      max-height: 500px;
-      z-index: 9999;
-      line-height: 1.5;
-      overflow-y: auto;
-      overflow-x: hidden;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-    `;
-    document.body.appendChild(translatePopup);
-    
-    translatePopup.addEventListener('mousedown', startDragging);
-    document.addEventListener('mousemove', drag);
-    document.addEventListener('mouseup', stopDragging);
+    const fallbackX = Math.max(16, Math.min(window.innerWidth - 430, window.innerWidth * 0.18));
+    const fallbackY = Math.max(16, window.innerHeight * 0.15);
+    translatePopup = createTranslatePopup('<p class="translate-loading">正在翻译...</p>', fallbackX, fallbackY);
   }
   translatePopup.updateContent(translation);
   
@@ -504,12 +472,12 @@ function updateTranslatePopup(translation, word, complete) {
       const usButton = translatePopup.querySelector('[data-phonetic="us"]');
       
       if (newPhonetic === 'uk') {
-        ukButton.style.display = '';
-        usButton.style.display = 'none';
+        ukButton.classList.remove('is-hidden');
+        usButton.classList.add('is-hidden');
         this.textContent = '🇬🇧';
       } else {
-        ukButton.style.display = 'none';
-        usButton.style.display = '';
+        ukButton.classList.add('is-hidden');
+        usButton.classList.remove('is-hidden');
         this.textContent = '🇺🇸';
       }
       
