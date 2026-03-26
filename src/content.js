@@ -156,6 +156,9 @@ function createTranslatePopup(text, x, y) {
   translatePopup.appendChild(contentDiv);
   document.body.appendChild(translatePopup);
 
+  // 初次创建后立即做一次视口内约束，避免弹层超出屏幕
+  clampPopupToViewport(translatePopup);
+
   // 添加拖动事件监听器
   translatePopup.addEventListener('mousedown', startDragging);
   document.addEventListener('mousemove', drag);
@@ -164,9 +167,29 @@ function createTranslatePopup(text, x, y) {
   // 添加一个用于更新内容的方法
   translatePopup.updateContent = function(newContent) {
     contentDiv.innerHTML = newContent;
+    // 内容高度变化后再次约束，避免底部或右侧溢出
+    clampPopupToViewport(translatePopup);
   };
 
   return translatePopup;
+}
+
+/**
+ * 将弹层位置限制在当前可视区域内
+ * @param {HTMLElement} popup
+ */
+function clampPopupToViewport(popup) {
+  if (!popup) return;
+  const margin = 8;
+  const rect = popup.getBoundingClientRect();
+  const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+  const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
+  const currentLeft = popup.offsetLeft;
+  const currentTop = popup.offsetTop;
+  const clampedLeft = Math.min(Math.max(currentLeft, margin), maxLeft);
+  const clampedTop = Math.min(Math.max(currentTop, margin), maxTop);
+  popup.style.left = `${clampedLeft}px`;
+  popup.style.top = `${clampedTop}px`;
 }
 
 /**
@@ -323,11 +346,15 @@ function drag(e) {
   if (isDragging && dragTarget) {
     dragTarget.style.left = (e.clientX - dragOffsetX) + 'px';
     dragTarget.style.top = (e.clientY - dragOffsetY) + 'px';
+    clampPopupToViewport(dragTarget);
   }
 }
 
 function stopDragging() {
   isDragging = false;
+  if (dragTarget) {
+    clampPopupToViewport(dragTarget);
+  }
   dragTarget = null;
 }
 

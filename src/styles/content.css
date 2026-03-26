@@ -30,23 +30,24 @@
   font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
   z-index: 2147483647;
   cursor: move;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .translate-popup__body {
-  padding: 16px 16px 8px;
-  max-height: none;
-  overflow: visible;
+  box-sizing: border-box;
+  padding: 16px 16px 14px;
+  max-height: calc(min(500px, calc(100vh - 10px)) - 20px);
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: rgba(113, 124, 130, 0.35) transparent;
 }
 
-.translate-popup::-webkit-scrollbar {
+.translate-popup__body::-webkit-scrollbar {
   width: 7px;
 }
 
-.translate-popup::-webkit-scrollbar-thumb {
+.translate-popup__body::-webkit-scrollbar-thumb {
   background: rgba(113, 124, 130, 0.35);
   border-radius: 7px;
 }
@@ -144,11 +145,11 @@
 
 .word-card__title {
   margin: 0 0 5px;
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 800;
-  color: #5d6a73;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: #4f5e69;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .word-line {
