@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "英文到中文翻译插件",
+  "name": "选中翻译",
   "version": "1.2.0",
   "description": "选择英文文本（单词、句子、段落）并翻译成简体中文",
   "icons": {
