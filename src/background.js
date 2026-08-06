@@ -1,3 +1,117 @@
+try {
+  importScripts('../key.js');
+} catch (error) {
+  console.warn('无法直接加载本地 key.js，将尝试按文本读取。', error);
+}
+importScripts('api-keys.js');
+
+const API_KEY_NAMES = ['googleApiKey', 'baiduAppId', 'baiduKey'];
+const MAX_TRANSLATION_LENGTH = 5000;
+const FETCH_TIMEOUT_MS = 12000;
+const CACHE_TEMPLATE_VERSION = 4;
+const MAX_CACHED_WORDS = 40;
+const MAX_CACHED_AUDIO_BYTES = 64 * 1024;
+const MAX_AUDIO_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function decodeHtmlEntities(value) {
+  const namedEntities = {
+    amp: '&',
+    apos: "'",
+    gt: '>',
+    lt: '<',
+    quot: '"'
+  };
+
+  return String(value == null ? '' : value).replace(
+    /&(#(?:x[0-9a-f]+|\d+)|amp|apos|gt|lt|quot);/gi,
+    function (entity, name) {
+      if (name[0] !== '#') return namedEntities[name.toLowerCase()] || entity;
+      const isHex = name[1].toLowerCase() === 'x';
+      const codePoint = Number.parseInt(name.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+      if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return entity;
+      return String.fromCodePoint(codePoint);
+    }
+  );
+}
+
+function safeExternalText(value) {
+  return escapeHtml(decodeHtmlEntities(value));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(function () {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function sendTabMessage(tabId, message) {
+  return new Promise(function (resolve) {
+    chrome.tabs.sendMessage(tabId, message, function () {
+      void chrome.runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+async function getConfiguredApiKeys() {
+  const [localKeys, legacySyncedKeys, embeddedKeys] = await Promise.all([
+    new Promise(function (resolve) {
+      chrome.storage.local.get(API_KEY_NAMES, resolve);
+    }),
+    new Promise(function (resolve) {
+      chrome.storage.sync.get(API_KEY_NAMES, resolve);
+    }),
+    TranslationApiKeys.load()
+  ]);
+  const storedKeys = TranslationApiKeys.resolve(localKeys, legacySyncedKeys);
+  return TranslationApiKeys.resolve(storedKeys, embeddedKeys);
+}
+
+function trimWordCache(cache) {
+  const words = Object.keys(cache);
+  if (words.length <= MAX_CACHED_WORDS) return;
+  words
+    .sort(function (left, right) {
+      return (cache[left]?.timestamp || 0) - (cache[right]?.timestamp || 0);
+    })
+    .slice(0, words.length - MAX_CACHED_WORDS)
+    .forEach(function (word) {
+      delete cache[word];
+    });
+}
+
+function byteArrayToBase64(audioData) {
+  let binary = '';
+  const chunkSize = 8192;
+  for (let offset = 0; offset < audioData.length; offset += chunkSize) {
+    binary += String.fromCharCode(...audioData.slice(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToByteArray(value) {
+  const binary = atob(value);
+  return Array.from(binary, function (character) {
+    return character.charCodeAt(0);
+  });
+}
+
 var MD5 = function (string) {
   
   function RotateLeft(lValue, iShiftBits) {
@@ -200,20 +314,42 @@ var MD5 = function (string) {
 }
 
 
-// 现有的 background.js 代码从这里开始
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   if (request.action === "translate") {
-    const text = request.text;
-    if (isEnglishWord(text)) {
-      fetchWordDefinition(text, sender.tab.id);
-    } else {
-      translateText(text, sender.tab.id);
+    const tabId = sender.tab?.id;
+    const text = typeof request.text === 'string' ? request.text.trim() : '';
+    const requestId = Number.isSafeInteger(request.requestId) ? request.requestId : 0;
+    if (!tabId || !requestId || !text || text.length > MAX_TRANSLATION_LENGTH) {
+      sendResponse({ ok: false });
+      return false;
     }
-    return false;
+
+    const task = isEnglishWord(text)
+      ? fetchWordDefinition(text, tabId, requestId)
+      : translateText(text, tabId, requestId);
+    task.then(function () {
+      sendResponse({ ok: true });
+    }).catch(function (error) {
+      console.error('Unhandled translation error:', error);
+      sendResponse({ ok: false });
+    });
+    return true;
   } else if (request.action === "playAudio") {
-    // 直接在 background 中播放音频
-    playAudioInBackground(request.word, request.type);
-    return false;
+    const tabId = sender.tab?.id;
+    const word = typeof request.word === 'string' ? request.word.trim() : '';
+    const type = String(request.type);
+    if (!tabId || !isEnglishWord(word) || !['1', '2'].includes(type)) {
+      sendResponse({ ok: false });
+      return false;
+    }
+
+    playAudioInBackground(word, type, tabId).then(function () {
+      sendResponse({ ok: true });
+    }).catch(function (error) {
+      console.error('Unhandled audio error:', error);
+      sendResponse({ ok: false });
+    });
+    return true;
   }
   return false;
 });
@@ -229,7 +365,7 @@ function stripYoudaoSpam(str) {
   if (/we\s+are\s+pirates|stolen\s+from\s+youdao|these\s+data\s+are\s+stolen/i.test(text)) {
     return '';
   }
-  return text;
+  return safeExternalText(text);
 }
 
 function getTrLine(tr) {
@@ -262,7 +398,6 @@ async function getCachedWord(word) {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
       const cachedItem = cache[word];
-      const CACHE_TEMPLATE_VERSION = 3;
       
       if (cachedItem) {
         // 检查缓存是否过期（例如24小时）
@@ -291,7 +426,6 @@ async function cacheWord(word, data) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
-      const CACHE_TEMPLATE_VERSION = 3;
       // 添加时间戳，用于后续可能的缓存过期处理
       cache[word] = {
         data: {
@@ -301,13 +435,13 @@ async function cacheWord(word, data) {
         templateVersion: CACHE_TEMPLATE_VERSION,
         timestamp: Date.now()
       };
-      // 限制缓存大小，最多存储100个单词
-      const words = Object.keys(cache);
-      if (words.length > 100) {
-        // 删除最早缓存的单词
-        delete cache[words[0]];
-      }
-      chrome.storage.local.set({ wordCache: cache }, resolve);
+      trimWordCache(cache);
+      chrome.storage.local.set({ wordCache: cache }, function () {
+        if (chrome.runtime.lastError) {
+          console.warn('保存单词缓存失败：', chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
     });
   });
 }
@@ -317,33 +451,36 @@ async function getPhoneticPreference() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(['phoneticPreference'], function(result) {
       // 默认使用美音
-      resolve(result.phoneticPreference || 'us');
+      resolve(result.phoneticPreference === 'uk' ? 'uk' : 'us');
     });
   });
 }
 
-async function fetchWordDefinition(word, tabId) {
+async function fetchWordDefinition(word, tabId, requestId) {
   try {
     // 先检查缓存
     const cachedResult = await getCachedWord(word);
     if (cachedResult && cachedResult.data && cachedResult.data.definition) {
       console.log('Using cached result for:', word);
-      chrome.tabs.sendMessage(tabId, {
+      await sendTabMessage(tabId, {
         action: "updateTranslation", 
         translation: cachedResult.data.definition, 
         complete: true,
-        word: word
+        word: word,
+        requestId: requestId
       });
       return;
     }
 
     const url = `https://dict.youdao.com/jsonapi_s?doctype=json&q=${encodeURIComponent(word)}`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'Accept': 'application/json'
       }
     });
+    if (!response.ok) {
+      throw new Error(`Youdao HTTP ${response.status}`);
+    }
     const data = await response.json();
     
     // 获取用户偏好的音标显示方式
@@ -362,21 +499,21 @@ async function fetchWordDefinition(word, tabId) {
       const wordInfo = data.ec.word[0];
 
       const flagSwitcher = `
-        <button class="flagSwitcher word-flag" data-current="${phoneticPreference}">${phoneticPreference === 'uk' ? '🇬🇧' : '🇺🇸'}</button>
+        <button type="button" class="flagSwitcher word-flag" data-current="${phoneticPreference}">${phoneticPreference === 'uk' ? '🇬🇧' : '🇺🇸'}</button>
       `;
       const ukButton = `
-        <button class="playButton phoneticButton ${phoneticPreference === 'us' ? 'is-hidden' : ''}" data-word="${word}" data-type="1" data-phonetic="uk">/${wordInfo.ukphone || 'n/a'}/</button>
+        <button type="button" class="playButton phoneticButton ${phoneticPreference === 'us' ? 'is-hidden' : ''}" data-word="${word}" data-type="1" data-phonetic="uk">/${safeExternalText(wordInfo.ukphone || 'n/a')}/</button>
       `;
 
       const usButton = `
-        <button class="playButton phoneticButton ${phoneticPreference === 'uk' ? 'is-hidden' : ''}" data-word="${word}" data-type="2" data-phonetic="us">/${wordInfo.usphone || 'n/a'}/</button>
+        <button type="button" class="playButton phoneticButton ${phoneticPreference === 'uk' ? 'is-hidden' : ''}" data-word="${word}" data-type="2" data-phonetic="us">/${safeExternalText(wordInfo.usphone || 'n/a')}/</button>
       `;
 
       result += flagSwitcher + ukButton + usButton;
     }
 
     result += `
-          <button class="moreButton" data-word="${word}">查看更多</button>
+          <button type="button" class="moreButton" data-word="${word}">查看更多</button>
         </div>
       </section>
       <section class="word-sections">
@@ -529,35 +666,42 @@ async function fetchWordDefinition(word, tabId) {
     // 缓存结
     await cacheWord(word, result);
 
-    chrome.tabs.sendMessage(tabId, {
+    await sendTabMessage(tabId, {
       action: "updateTranslation", 
       translation: result, 
       complete: true,
-      word: word
+      word: word,
+      requestId: requestId
     });
   } catch (error) {
     console.error('API error:', error);
     // 如果获取单词定义失败，则使用百度和Google翻译单词
     const extra = '<p class="sentence-note">有道词典解析失败，以下展示百度与 Google 翻译结果。</p>';
-    translateText(word, tabId, extra);
+    await translateText(word, tabId, requestId, extra);
   }
 }
 
-async function translateText(text, tabId, extra = '') {
+function getEngineDisplayResult(result, engineName) {
+  if (result.status === 'fulfilled') {
+    return safeExternalText(result.value);
+  }
+  console.error(`${engineName} translation failed:`, result.reason);
+  return `${engineName} 翻译失败，请检查密钥、额度或网络后重试。`;
+}
+
+async function translateText(text, tabId, requestId, extra = '') {
   try {
-    // 获取存储的 API 密钥和 App ID
-    const { googleApiKey, baiduAppId, baiduKey } = await new Promise((resolve) => {
-      chrome.storage.sync.get(['googleApiKey', 'baiduAppId', 'baiduKey'], resolve);
-    });
+    const { googleApiKey, baiduAppId, baiduKey } = await getConfiguredApiKeys();
+    const safeText = escapeHtml(text);
 
     // 首先发送一个初始的翻译结果框架
-    chrome.tabs.sendMessage(tabId, {
+    await sendTabMessage(tabId, {
       action: "updateTranslation",
       translation: `
         <div class="sentence-layout sentence-layout--results-only">
           ${extra}
           <div class="sentence-card">
-            <div class="sentence-content">${text}</div>
+            <div class="sentence-content">${safeText}</div>
           </div>
           <div class="sentence-platform-block">
             <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
@@ -569,34 +713,28 @@ async function translateText(text, tabId, extra = '') {
           </div>
         </div>
       `,
-      complete: false
+      complete: false,
+      requestId: requestId
     });
 
-    let baiduResult = '';
-    let googleResult = '';
-
-    // 检查百度翻译的 App ID 和 Key
-    if (baiduAppId && baiduKey) {
-      baiduResult = await translateWithBaidu(text, baiduAppId, baiduKey);
-    } else {
-      baiduResult = "未设置百度翻译 App ID / Key，请在插件设置中填写。";
-    }
-
-    // 检查 Google API Key
-    if (googleApiKey) {
-      googleResult = await translateWithGoogle(text, googleApiKey);
-    } else {
-      googleResult = "未设置 Google API Key，请在插件设置中填写。";
-    }
+    const baiduTask = baiduAppId && baiduKey
+      ? translateWithBaidu(text, baiduAppId, baiduKey)
+      : Promise.resolve('未设置百度翻译 App ID / Key，请在插件设置中填写。');
+    const googleTask = googleApiKey
+      ? translateWithGoogle(text, googleApiKey)
+      : Promise.resolve('未设置 Google API Key，请在插件设置中填写。');
+    const [baiduSettled, googleSettled] = await Promise.allSettled([baiduTask, googleTask]);
+    const baiduResult = getEngineDisplayResult(baiduSettled, '百度');
+    const googleResult = getEngineDisplayResult(googleSettled, 'Google');
 
     // 更新翻译结果
-    chrome.tabs.sendMessage(tabId, {
+    await sendTabMessage(tabId, {
       action: "updateTranslation",
       translation: `
         <div class="sentence-layout sentence-layout--results-only">
           ${extra}
           <div class="sentence-card">
-            <div class="sentence-content">${text}</div>
+            <div class="sentence-content">${safeText}</div>
           </div>
           <div class="sentence-platform-block">
             <div class="sentence-result"><span class="engine-badge engine-badge--baidu">B</span><span class="engine-name">Baidu Fanyi</span></div>
@@ -608,18 +746,20 @@ async function translateText(text, tabId, extra = '') {
           </div>
         </div>
       `,
-      complete: true
+      complete: true,
+      requestId: requestId
     });
 
   } catch (error) {
     console.error('Translation error:', error);
-    chrome.tabs.sendMessage(tabId, {
+    await sendTabMessage(tabId, {
       action: "updateTranslation",
       translation: `
         ${extra}
         <p class="sentence-note sentence-note--error">翻译失败，请重试。</p>
       `,
-      complete: true
+      complete: true,
+      requestId: requestId
     });
   }
 }
@@ -633,15 +773,20 @@ async function translateWithGoogle(text, apiKey) {
     format: 'text'
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data)
   });
-  const json = await response.json();
-  if (json.data && json.data.translations && json.data.translations.length > 0) {
+  const json = await response.json().catch(function () {
+    return null;
+  });
+  if (!response.ok) {
+    throw new Error(`Google HTTP ${response.status}`);
+  }
+  if (json?.data?.translations?.length > 0) {
     return json.data.translations[0].translatedText;
   } else {
     throw new Error('Google translation failed');
@@ -655,11 +800,16 @@ async function translateWithBaidu(text, appId, key) {
   const str1 = appId + text + salt + key;
   const sign = MD5(str1).toString();
 
-  const url = `http://api.fanyi.baidu.com/api/trans/vip/translate?q=${encodeURIComponent(text)}&from=${from}&to=${to}&appid=${appId}&salt=${salt}&sign=${sign}`;
+  const url = `https://api.fanyi.baidu.com/api/trans/vip/translate?q=${encodeURIComponent(text)}&from=${from}&to=${to}&appid=${appId}&salt=${salt}&sign=${sign}`;
 
-  const response = await fetch(url);
-  const json = await response.json();
-  if (json.trans_result && json.trans_result.length > 0) {
+  const response = await fetchWithTimeout(url);
+  const json = await response.json().catch(function () {
+    return null;
+  });
+  if (!response.ok) {
+    throw new Error(`Baidu HTTP ${response.status}`);
+  }
+  if (json?.trans_result?.length > 0) {
     return json.trans_result[0].dst;
   } else {
     throw new Error('Baidu translation failed');
@@ -667,40 +817,41 @@ async function translateWithBaidu(text, appId, key) {
 }
 
 // 修改音频播放函数
-async function playAudioInBackground(word, type) {
+async function playAudioInBackground(word, type, tabId) {
   const audioType = type == '2' ? 'us' : 'uk';
   try {
     // 先检查缓存
     const cachedResult = await getCachedWord(word);
     if (cachedResult && cachedResult.data.audio && cachedResult.data.audio[audioType]) {
-      // 如果有缓存的音频数据，直接使用
-      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-        if (tabs[0]) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-              action: "playAudioInContent",
-              audioData: cachedResult.data.audio[audioType]
-          });
-        }
+      const cachedAudio = cachedResult.data.audio[audioType];
+      const audioData = typeof cachedAudio === 'string'
+        ? base64ToByteArray(cachedAudio)
+        : cachedAudio;
+      await sendTabMessage(tabId, {
+        action: "playAudioInContent",
+        audioData: audioData
       });
       return;
     }
 
     // 如果没有缓存，请求音频数据
     const audioUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=${type}`;
-    const response = await fetch(audioUrl);
+    const response = await fetchWithTimeout(audioUrl);
+    if (!response.ok) {
+      throw new Error(`Youdao audio HTTP ${response.status}`);
+    }
     const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > MAX_AUDIO_RESPONSE_BYTES) {
+      throw new Error('Youdao audio response is too large');
+    }
     const audioData = Array.from(new Uint8Array(arrayBuffer));
 
     // 播放音频
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          action: "playAudioInContent",
-          audioData: audioData
-        });
-      }
+    await sendTabMessage(tabId, {
+      action: "playAudioInContent",
+      audioData: audioData
     });
-    cacheWordAudio(word, audioType, audioData);
+    await cacheWordAudio(word, audioType, audioData);
   } catch (error) {
     console.error('Error fetching audio:', error);
   }
@@ -708,29 +859,34 @@ async function playAudioInBackground(word, type) {
 
 // 添加缓存音频的函数
 async function cacheWordAudio(word, audioType, audioData) {
+  if (!Array.isArray(audioData) || audioData.length === 0 || audioData.length > MAX_CACHED_AUDIO_BYTES) {
+    return;
+  }
+
   return new Promise((resolve) => {
     chrome.storage.local.get(['wordCache'], function(result) {
       const cache = result.wordCache || {};
       if (!cache[word]) {
         cache[word] = {
           data: { audio: {} },
+          templateVersion: CACHE_TEMPLATE_VERSION,
           timestamp: Date.now()
         };
       } else if (!cache[word].data.audio) {
         cache[word].data.audio = {};
       }
       // 保存音频数据
-      cache[word].data.audio[audioType] = audioData;
+      cache[word].data.audio[audioType] = byteArrayToBase64(audioData);
       // 更新时间戳
       cache[word].timestamp = Date.now();
-      // 限制缓存大小，最多存储100个单词
-      const words = Object.keys(cache);
-      if (words.length > 100) {
-        // 删除最早缓存的单词
-        delete cache[words[0]];
-      }
+      trimWordCache(cache);
       
-      chrome.storage.local.set({ wordCache: cache }, resolve);
+      chrome.storage.local.set({ wordCache: cache }, function () {
+        if (chrome.runtime.lastError) {
+          console.warn('保存音频缓存失败：', chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
     });
   });
 }

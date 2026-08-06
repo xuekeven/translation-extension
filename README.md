@@ -9,7 +9,7 @@
 | 项目 | 说明 |
 |------|------|
 | **名称** | 选中翻译 |
-| **版本** | 1.2.0（见 `manifest.json`） |
+| **版本** | 1.3.0（见 `manifest.json`） |
 | **目标** | 在任意网页选择英文内容，展示词典释义（单词）或机器翻译（短语/句子） |
 | **输出语言** | 简体中文（词典释义来自有道接口结构；机器翻译为 `zh` / `zh-CN`） |
 
@@ -39,7 +39,7 @@ flowchart LR
     POP["src/popup/\n设置与密钥"]
     BG["src/background.js\nService Worker"]
   end
-  POP -->|chrome.storage.sync| BG
+  POP -->|chrome.storage| BG
   CS -->|sendMessage: translate / playAudio| BG
   BG -->|sendMessage: updateTranslation / playAudioInContent| CS
   BG -->|fetch| API["有道 / Google / 百度"]
@@ -81,6 +81,14 @@ flowchart TD
 4. 结果浮层可**拖动**，并会自动约束在可视区域内（避免超出屏幕）；点击浮层外的页面区域可关闭（等待结果过程中为避免误关有特殊判断）。
 5. 单词结果中可切换英/美音按钮、「查看更多」跳转有道网页；完整结果返回后会按偏好**自动播放**一次读音。
 
+### 本地验证
+
+项目测试不依赖第三方包，使用 Node.js 内置测试运行器：
+
+```bash
+npm test
+```
+
 ### 各模式说明
 
 | 模式 | 行为 |
@@ -106,7 +114,7 @@ flowchart TD
 | 百度翻译 Key | `baiduKey` | 同上应用密钥 |
 | 音标偏好 | `phoneticPreference` | `us` / `uk`，在单词浮层内切换时写入 |
 
-点击 **「保存以上密钥」** 后写入 `chrome.storage.sync`。至少需要配置 **Google Key** 或 **百度 App ID + Key** 中的一套，短语/句子翻译才会有对应引擎的结果。
+插件会直接加载项目根目录、已被 `.gitignore` 忽略的 `key.js`，从全局 `TRANSLATION_API_KEYS` 配置对象读取密钥，无需再手动填写。弹出页会显示自动读取到的值；如在弹出页点击 **「保存以上密钥」**，对应值会写入本机 `chrome.storage.local` 并优先于 `key.js`。旧版本保存在 `chrome.storage.sync` 的密钥仍可读取，并会在下次保存时迁移到本机。至少需要提供 **Google Key** 或 **百度 App ID + Key** 中的一套，短语/句子翻译才会有对应引擎的结果。
 
 ### 获取第三方密钥（官方入口）
 
@@ -115,7 +123,7 @@ flowchart TD
 
 ### 权限与网络
 
-扩展在 `manifest.json` 中声明了 `activeTab`、`storage` 及多个 `host_permissions`，用于访问有道、Google、百度等接口。安装时浏览器会展示这些权限说明。
+扩展在 `manifest.json` 中声明了 `storage` 与三个翻译服务所需的 `host_permissions`。内容脚本仅注入 HTTP/HTTPS 页面，不访问浏览器内部页面或本地文件。
 
 ---
 
@@ -123,8 +131,9 @@ flowchart TD
 
 | 存储 | 用途 |
 |------|------|
-| `chrome.storage.sync` | 用户设置与 API 密钥（可随 Chrome 同步，受配额限制） |
-| `chrome.storage.local` | 单词释义缓存 `wordCache`（约 24 小时过期、最多约 100 词，含可选音频二进制缓存） |
+| 根目录 `key.js` | 本地默认 API 密钥，不提交到 Git，由后台和弹出页自动读取 |
+| `chrome.storage.sync` | 启用状态、直接翻译和音标偏好等非敏感用户设置 |
+| `chrome.storage.local` | API 密钥覆盖值与 `wordCache`（约 24 小时过期、最多约 40 词，音频使用 Base64 且限制单项大小） |
 
 ---
 
@@ -133,11 +142,14 @@ flowchart TD
 ```
 chrome-translation-extension/
 ├── manifest.json              # 扩展清单（入口指向 src/）
+├── key.js                     # 本地默认密钥（被 Git 忽略）
+├── package.json               # 零依赖回归测试命令
 ├── LICENSE
 ├── README.md
 ├── TechStack.md
-└── src/
-    ├── background.js            # Service Worker：翻译、缓存、音频
+├── src/
+    ├── api-keys.js            # 读取 key.js 并合并弹出页覆盖值
+    ├── background.js          # Service Worker：翻译、缓存、音频
     ├── content.js             # 内容脚本：选区、浮层、消息
     ├── icons/                 # 工具栏图标（紫渐变「译」）
     ├── styles/
@@ -146,6 +158,9 @@ chrome-translation-extension/
         ├── popup.html
         ├── popup.css          # 弹出页专用样式
         └── popup.js
+└── test/
+    ├── extension.test.js      # 安全、权限、缓存和解析回归测试
+    └── test.html              # 手工选词测试页
 ```
 
 | 路径 | 作用 |
@@ -155,15 +170,17 @@ chrome-translation-extension/
 | `src/background.js` | 翻译路由、有道/百度/Google 请求、MD5 签名、缓存与音频拉取 |
 | `src/popup/popup.html` · `popup.js` · `popup.css` | 设置界面与 `storage` 读写 |
 | `src/styles/content.css` | 注入网页的 `.translate-icon` / `.translate-popup` 等 |
+| `test/extension.test.js` | Node.js 内置测试运行器执行的零依赖回归测试 |
 
 ---
 
 ## 注意事项
 
-- **安全**：勿将真实 API 密钥写入代码或提交到 Git；使用弹出页保存或本地环境变量（若日后接入构建流程）。
-- **清单与权限**：当前 `host_permissions` 仅包含有道、Google、百度翻译所需域名；MD5 在 `src/background.js` 内联实现。
-- **缓存策略**：单词缓存项包含 `templateVersion`，当模板升级时会自动淘汰旧缓存，避免旧结构/旧样式导致展示异常。
-- **百度接口**：代码中使用 `http://api.fanyi.baidu.com/...`（明文 HTTP）。生产环境建议按百度官方文档改用 **HTTPS** 端点（若提供），并关注区域与配额限制。
+- **安全**：`key.js` 已被 `.gitignore` 忽略，请勿强制提交。浏览器扩展中的密钥无法真正保密，若分发插件，其他人仍可从扩展文件或网络请求中读取密钥；建议仅本机使用，并在第三方平台限制密钥权限和额度。
+- **请求安全**：仅可信用户事件可以发起翻译，文本最长 5000 字符；页面展示使用标签/属性白名单并转义第三方文本。
+- **清单与权限**：当前 `host_permissions` 仅包含有道、Google、百度翻译所需 HTTPS 域名；MD5 在 `src/background.js` 内联实现。
+- **缓存策略**：单词缓存项包含 `templateVersion`，当模板升级时会自动淘汰旧缓存；音频缓存使用 Base64 并限制大小，避免快速耗尽 `storage.local` 配额。
+- **引擎容错**：百度和 Google 并行请求、独立显示结果，单个引擎失败不会遮蔽另一个引擎的成功结果。
 
 ---
 

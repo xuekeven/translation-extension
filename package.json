@@ -1,0 +1,8 @@
+{
+  "name": "selection-translation-extension",
+  "version": "1.3.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

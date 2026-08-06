@@ -45,10 +45,10 @@ mindmap
 | 能力 | 用途 |
 |------|------|
 | `manifest_version: 3` | 使用 MV3 清单格式 |
-| `content_scripts` | 向所有页面注入 `src/content.js` 与 `src/styles/content.css` |
+| `content_scripts` | 向 HTTP/HTTPS 页面注入 `src/content.js` 与 `src/styles/content.css` |
 | `background.service_worker` | `src/background.js` 处理翻译与缓存 |
 | `action.default_popup` | 工具栏图标打开 `src/popup/popup.html` |
-| `permissions`：`storage`、`activeTab` | 同步/本地存储；与当前标签交互 |
+| `permissions`：`storage` | 保存同步设置、本机密钥覆盖值与缓存 |
 | `host_permissions` | 允许 `fetch` 访问有道、Google、百度等域名 |
 | `chrome.runtime.sendMessage` / `onMessage` | 内容脚本 ⟷ 后台、弹出页 ⟷ 内容脚本 |
 
@@ -74,11 +74,11 @@ mindmap
 ```javascript
 // 异步存储（Promise 封装示例）
 new Promise((resolve) => {
-  chrome.storage.sync.get(['key'], resolve);
+  chrome.storage.local.get(['googleApiKey'], resolve);
 });
 
 // 跨上下文消息
-chrome.runtime.sendMessage({ action: 'translate', text: 'hello' });
+chrome.runtime.sendMessage({ action: 'translate', text: 'hello', requestId: 1 });
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ... */ });
 ```
 
@@ -107,7 +107,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ## 5. Chrome `storage` API
 
-**简介**：`chrome.storage.sync` 用于设置与小体积密钥；`chrome.storage.local` 用于较大的单词缓存。
+**简介**：`chrome.storage.sync` 仅用于非敏感设置；`chrome.storage.local` 用于本机 API 密钥覆盖值与单词/音频缓存。
 
 | 资源 | 地址 |
 |------|------|
@@ -124,7 +124,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => { /* ...
 
 ## 6. Chrome `tabs` API
 
-**简介**：后台向指定标签页的内容脚本发消息时使用 `chrome.tabs.sendMessage(tabId, message)`；播放音频时查询当前活动标签。
+**简介**：后台向发起请求的标签页发送翻译和音频消息，始终沿用 `sender.tab.id`，避免用户切换标签页后把结果发送到错误页面。
 
 | 资源 | 地址 |
 |------|------|
@@ -202,12 +202,12 @@ sequenceDiagram
   participant S as storage
   participant N as 网络 API
   U->>C: 选中文本 mouseup
-  C->>B: translate { text }
+  C->>B: translate { text, requestId }
   B->>S: 读 API 密钥 / 缓存
-  B->>N: fetch 有道或百度/Google
+  B->>N: fetch 有道或并行请求百度/Google
   N-->>B: JSON / 音频
   B->>S: 写 wordCache（可选）
-  B->>C: updateTranslation
+  B->>C: updateTranslation { requestId }
   C->>U: 显示浮层
 ```
 

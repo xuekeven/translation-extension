@@ -1,3 +1,16 @@
+const EXTENSION_ROOT_ID = '__selection_translation_extension_root__';
+const MAX_TRANSLATION_LENGTH = 5000;
+const ALLOWED_TRANSLATION_TAGS = new Set(['section', 'div', 'h1', 'p', 'span', 'button']);
+const ALLOWED_TRANSLATION_ATTRIBUTES = new Set([
+  'class',
+  'type',
+  'aria-label',
+  'data-current',
+  'data-word',
+  'data-type',
+  'data-phonetic'
+]);
+
 // 标记是否正在拖动弹出框
 let isDragging = false;
 
@@ -6,9 +19,6 @@ let dragOffsetX, dragOffsetY;
 
 // 存储最后选中的文本
 let lastSelectedText = '';
-
-// 存储最后选中的范围
-let lastSelectedRange = null;
 
 // 在文件开头添加一个变量来存储开关状态
 let isTranslationEnabled = true;
@@ -21,6 +31,72 @@ let isDirectTranslateEnabled = false;
 
 // 添加一个变量来存储是否正在等待翻译结果
 let isWaitingForTranslateResult = false;
+
+let activeTranslationRequestId = 0;
+let sharedAudioContext = null;
+let extensionRoot = null;
+
+function getExtensionRoot() {
+  if (!extensionRoot || !extensionRoot.isConnected) {
+    extensionRoot = document.createElement('div');
+    extensionRoot.id = EXTENSION_ROOT_ID;
+    (document.body || document.documentElement).appendChild(extensionRoot);
+  }
+  return extensionRoot;
+}
+
+function queryExtensionElement(selector) {
+  return getExtensionRoot().querySelector(selector);
+}
+
+function isExtensionInteraction(event) {
+  if (!extensionRoot) return false;
+  const eventPath = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  return eventPath.includes(extensionRoot) || extensionRoot.contains(event.target);
+}
+
+function setSafeTranslationHtml(container, html) {
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+
+  Array.from(template.content.querySelectorAll('*')).forEach(function (element) {
+    const tagName = element.tagName.toLowerCase();
+    if (!ALLOWED_TRANSLATION_TAGS.has(tagName)) {
+      element.replaceWith(document.createTextNode(element.textContent || ''));
+      return;
+    }
+
+    Array.from(element.attributes).forEach(function (attribute) {
+      if (!ALLOWED_TRANSLATION_ATTRIBUTES.has(attribute.name)) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+
+    if (tagName === 'button') {
+      element.setAttribute('type', 'button');
+    }
+  });
+
+  container.replaceChildren(template.content.cloneNode(true));
+}
+
+async function playAudioData(audioData) {
+  if (!Array.isArray(audioData) || audioData.length === 0 || audioData.length > 2 * 1024 * 1024) return;
+
+  if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+    sharedAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (sharedAudioContext.state === 'suspended') {
+    await sharedAudioContext.resume();
+  }
+
+  const arrayBuffer = new Uint8Array(audioData).buffer;
+  const buffer = await sharedAudioContext.decodeAudioData(arrayBuffer);
+  const source = sharedAudioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(sharedAudioContext.destination);
+  source.start(0);
+}
 
 // 添加一个监听器来接收开关状态的更新
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
@@ -38,20 +114,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     return false;
   }
   if (request.action === "playAudioInContent") {
-    // 创建 AudioContext
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // 将数组转回 ArrayBuffer
-    const arrayBuffer = new Uint8Array(request.audioData).buffer;
-    
-    // 解码音频数据
-    audioContext.decodeAudioData(arrayBuffer, function(buffer) {
-      // 创建音频源
-      const source = audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioContext.destination);
-      source.start(0);
-    }, function(error) {
+    playAudioData(request.audioData).catch(function (error) {
       console.error('Error decoding audio data:', error);
     });
   }
@@ -68,15 +131,6 @@ chrome.storage.sync.get(['directTranslate'], function(data) {
   isDirectTranslateEnabled = data.directTranslate || false;
 });
 
-// 添加这个新函数
-function saveAndRestoreSelection(action) {
-  const selection = window.getSelection();
-  const range = selection.getRangeAt(0);
-  action();
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
 /**
  * 创建翻译图标
  * @param {number} x - 图标的横坐标
@@ -84,14 +138,15 @@ function saveAndRestoreSelection(action) {
  * @returns {HTMLElement} - 创建的翻译图标元素
  */
 function createTranslateIcon(x, y) {
-  const translateIcon = document.createElement('div');
+  const translateIcon = document.createElement('button');
+  translateIcon.type = 'button';
+  translateIcon.setAttribute('aria-label', '翻译选中的文本');
   translateIcon.className = 'translate-icon';
   translateIcon.style.left = `${x}px`;
   translateIcon.style.top = `${y}px`;
-  translateIcon.innerHTML = '<span style="color: white; font-weight: bold;">译</span>';
+  translateIcon.textContent = '译';
   translateIcon.addEventListener('click', e => handleIconClick(e, x, y));
-  document.body.appendChild(translateIcon);
-  console.log('Translate icon created at:', x, y); // 添加日志
+  getExtensionRoot().appendChild(translateIcon);
   return translateIcon;
 }
 
@@ -111,10 +166,9 @@ function showTranslateIcon(x, y) {
  * 隐藏翻译图标
  */
 function hideTranslateIcon() {
-  const existingIcon = document.querySelector('.translate-icon');
+  const existingIcon = queryExtensionElement('.translate-icon');
   if (existingIcon) {
     existingIcon.remove();
-    console.log('Existing translate icon removed'); // 添加日志
   }
 }
 
@@ -123,6 +177,7 @@ function hideTranslateIcon() {
  * @param {Event} e - 点击事件对象
  */
 function handleIconClick(e, x, y) {
+  if (!e.isTrusted) return;
   if (!isTranslationEnabled) return; // 如果翻译功能被禁用，直接返回
 
   e.preventDefault(); // 阻止默认行为
@@ -150,11 +205,11 @@ function createTranslatePopup(text, x, y) {
   // 创建内容容器
   const contentDiv = document.createElement('div');
   contentDiv.className = 'translate-popup__body';
-  contentDiv.innerHTML = text; // 用 innerHTML 来渲染 HTML
+  setSafeTranslationHtml(contentDiv, text);
 
   // 组装弹出框
   translatePopup.appendChild(contentDiv);
-  document.body.appendChild(translatePopup);
+  getExtensionRoot().appendChild(translatePopup);
 
   // 初次创建后立即做一次视口内约束，避免弹层超出屏幕
   clampPopupToViewport(translatePopup);
@@ -166,7 +221,7 @@ function createTranslatePopup(text, x, y) {
 
   // 添加一个用于更新内容的方法
   translatePopup.updateContent = function(newContent) {
-    contentDiv.innerHTML = newContent;
+    setSafeTranslationHtml(contentDiv, newContent);
     // 内容高度变化后再次约束，避免底部或右侧溢出
     clampPopupToViewport(translatePopup);
   };
@@ -196,11 +251,13 @@ function clampPopupToViewport(popup) {
  * 隐藏翻译结果弹出框
  */
 function hideTranslatePopup() {
-  const existingPopup = document.querySelector('.translate-popup');
+  const existingPopup = queryExtensionElement('.translate-popup');
   if (existingPopup) {
     existingPopup.remove();
     currentTranslatingWord = ''; // 清除当前翻译的单词
   }
+  activeTranslationRequestId += 1;
+  isWaitingForTranslateResult = false;
 }
 
 /**
@@ -209,6 +266,8 @@ function hideTranslatePopup() {
  * @returns {boolean} - 如果包含有意义的英文内容返回true，否则返回false
  */
 function isTranslateable(text) {
+    if (typeof text !== 'string' || text.length > MAX_TRANSLATION_LENGTH) return false;
+
     // 至少包含一个英文单词（1个或以上字母）的正则表达式
     const englishWordPattern = /[a-zA-Z]{1,}/;
   
@@ -238,85 +297,28 @@ function isTranslateable(text) {
  * @param {number} y - 结果显示的纵坐标
  */
 function translateText(text, x, y) {
+  if (!isTranslateable(text)) return;
   hideTranslateIcon(); // 隐藏翻译图标
   
   // 创建一个新的弹出框或获取现有的弹出框
-  let popup = document.querySelector('.translate-popup');
+  let popup = queryExtensionElement('.translate-popup');
   if (!popup) {
     popup = createTranslatePopup('<p class="translate-loading">正在翻译...</p>', x, y);
   }
 
-  // 不再恢复选区，方便操作、滚动页面
-  // if (lastSelectedRange) {
-  //   const selection = window.getSelection();
-  //   selection.removeAllRanges(); // 先清除现有的选区
-  //   try {
-  //     const newRange = lastSelectedRange.cloneRange(); // 克隆范围避免可能的引用问题
-  //     selection.addRange(newRange);
-  //   } catch (e) {
-  //     console.warn('Failed to restore text selection:', e);
-  //   }
-  // }
-  
   isWaitingForTranslateResult = true;
-  chrome.runtime.sendMessage({action: "translate", text: text});
-}
-
-/**
- * 在文档中选择指定的文本
- * @param {string} text - 要选择的文本
- * @param {number} [x] - 目标位置的横坐标（可选）
- * @param {number} [y] - 目标位置的纵坐标（可选）
- */
-function selectTextInDocument(text, x, y) {
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-
-  const treeWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-  let node;
-  let closestNode = null;
-  let closestIndex = -1;
-  let closestDistance = Infinity;
-
-  // 遍历所有文本节点
-  while (node = treeWalker.nextNode()) {
-    const index = node.textContent.indexOf(text);
-    if (index > -1) {
-      // 如果提供了坐标，计算距离并找到最近的节点
-      if (x !== undefined && y !== undefined) {
-        const range = document.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + text.length);
-        const rect = range.getBoundingClientRect();
-        
-        // 计算节点中心点到目标位置的距离
-        const nodeX = rect.left + rect.width / 2;
-        const nodeY = rect.top + rect.height / 2 + window.scrollY;
-        const distance = Math.sqrt(
-          Math.pow(nodeX - x, 2) + 
-          Math.pow(nodeY - y, 2)
-        );
-
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestNode = node;
-          closestIndex = index;
-        }
-      } else {
-        // 如果没有提供坐标，使用第一个匹配的节点
-        closestNode = node;
-        closestIndex = index;
-        break;
-      }
-    }
-  }
-
-  // 如果找到了节点，创建选区
-  if (closestNode) {
-    const range = document.createRange();
-    range.setStart(closestNode, closestIndex);
-    range.setEnd(closestNode, closestIndex + text.length);
-    selection.addRange(range);
+  const requestId = ++activeTranslationRequestId;
+  const sendPromise = chrome.runtime.sendMessage({action: "translate", text: text, requestId: requestId});
+  if (sendPromise && typeof sendPromise.then === 'function') {
+    sendPromise.then(function (response) {
+      if (response?.ok !== false || requestId !== activeTranslationRequestId) return;
+      isWaitingForTranslateResult = false;
+      updateTranslatePopup('<p class="sentence-note sentence-note--error">翻译请求未被后台接受，请重试。</p>', '', true);
+    }).catch(function () {
+      if (requestId !== activeTranslationRequestId) return;
+      isWaitingForTranslateResult = false;
+      updateTranslatePopup('<p class="sentence-note sentence-note--error">无法连接插件后台，请重新加载扩展后重试。</p>', '', true);
+    });
   }
 }
 
@@ -359,14 +361,16 @@ function stopDragging() {
 }
 
 function mouseupHandler(e) {
+  if (!e.isTrusted) return;
   if (!isTranslationEnabled) return; // 如果翻译功能被禁用，直接返回
+  if (isExtensionInteraction(e)) return;
 
   const selectedText = window.getSelection().toString().trim();
   // 如果选中的文本不是英文单词，则不进行翻译
   if (!selectedText || !isTranslateable(selectedText)) return;
 
   // 检查选中的文本是否在翻译弹层内
-  const translatePopup = document.querySelector('.translate-popup');
+  const translatePopup = queryExtensionElement('.translate-popup');
   const isInsidePopup = translatePopup && translatePopup.contains(e.target);
 
   // 如果在弹层内且选中的文本与当前翻译的单词相同，则不显示翻译图标
@@ -380,11 +384,6 @@ function mouseupHandler(e) {
   const y = rect.bottom;
   lastSelectedText = selectedText;
   // console.log('test--- mouseup', e, rect, x, y, lastSelectedText);
-
-  // 清除选区，方便操作、滚动页面
-  // const selection = window.getSelection();
-  // selection.removeAllRanges();
-  // lastSelectedRange = range;
 
   if (isDirectTranslateEnabled) {
     // 创建弹层并发送翻译请求
@@ -407,7 +406,7 @@ document.addEventListener('click', function(e) {
   if (!selectedText) {
     hideTranslateIcon();
   }
-  const translatePopup = document.querySelector('.translate-popup');
+  const translatePopup = queryExtensionElement('.translate-popup');
   if (translatePopup && !translatePopup.contains(e.target) && !isWaitingForTranslateResult) {
     hideTranslatePopup();
   }
@@ -428,7 +427,8 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     }
     return false; // 不需要异步响应
   } else if (request.action === "updateTranslation") {
-    isWaitingForTranslateResult = false;
+    if (request.requestId !== activeTranslationRequestId) return false;
+    isWaitingForTranslateResult = !request.complete;
     if (!isTranslationEnabled) return false;
     updateTranslatePopup(request.translation, request.word, request.complete);
     return false; // 不需要异步响应
@@ -450,7 +450,7 @@ document.addEventListener('mouseup', function() {
 function updateTranslatePopup(translation, word, complete) {
   currentTranslatingWord = word || '';
 
-  let translatePopup = document.querySelector('.translate-popup');
+  let translatePopup = queryExtensionElement('.translate-popup');
   
   if (!translatePopup) {
     const fallbackX = Math.max(16, Math.min(window.innerWidth - 430, window.innerWidth * 0.18));
@@ -463,6 +463,7 @@ function updateTranslatePopup(translation, word, complete) {
   const playButtons = translatePopup.querySelectorAll('.playButton');
   playButtons.forEach(button => {
     button.addEventListener('click', function(e) {
+      if (!e.isTrusted) return;
       e.stopPropagation();
       const word = this.getAttribute('data-word');
       const type = this.getAttribute('data-type');
@@ -480,9 +481,10 @@ function updateTranslatePopup(translation, word, complete) {
   const moreButtons = translatePopup.querySelectorAll('.moreButton');
   moreButtons.forEach(button => {
     button.addEventListener('click', function(e) {
+      if (!e.isTrusted) return;
       e.stopPropagation();
       const word = this.getAttribute('data-word');
-      window.open(`https://dict.youdao.com/result?word=${encodeURIComponent(word)}&lang=en`, '_blank');
+      window.open(`https://dict.youdao.com/result?word=${encodeURIComponent(word)}&lang=en`, '_blank', 'noopener,noreferrer');
     });
   });
 
@@ -490,6 +492,7 @@ function updateTranslatePopup(translation, word, complete) {
   const flagSwitcher = translatePopup.querySelector('.flagSwitcher');
   if (flagSwitcher) {
     flagSwitcher.addEventListener('click', function(e) {
+      if (!e.isTrusted) return;
       e.stopPropagation();
       const currentPhonetic = this.getAttribute('data-current');
       const newPhonetic = currentPhonetic === 'us' ? 'uk' : 'us';
@@ -551,4 +554,3 @@ function updateTranslatePopup(translation, word, complete) {
     });
   }
 }
-

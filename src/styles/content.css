@@ -1,3 +1,8 @@
+#__selection_translation_extension_root__ {
+  all: initial;
+}
+
+@scope (#__selection_translation_extension_root__) {
 /* 翻译图标样式 */
 .translate-icon {
   position: fixed;
@@ -9,6 +14,8 @@
   justify-content: center;
   align-items: center;
   cursor: pointer;
+  border: 0;
+  padding: 0;
   box-shadow: 0 6px 18px rgba(99, 102, 241, 0.35);
   z-index: 2147483646;
   color: #fff;
@@ -323,4 +330,5 @@
 
 .sentence-note--error {
   margin-top: 4px;
+}
 }
