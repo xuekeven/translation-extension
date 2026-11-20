@@ -40,56 +40,8 @@
       </div>
     </section>
 
-    <section class="card" aria-labelledby="heading-api">
-      <h2 id="heading-api" class="card__title">API 密钥</h2>
-      <p class="card__lead">默认读取项目根目录的 <strong>key.js</strong>；这里保存的密钥仅存储在本机并覆盖内置值。</p>
-
-      <div class="field">
-        <label class="field__label" for="googleApiKey">Google API Key</label>
-        <div class="input-wrap">
-          <input type="text" class="secret-input input--masked" id="googleApiKey" placeholder="Cloud Translation API 密钥" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
-          <button type="button" class="toggle-visibility" data-target="googleApiKey" aria-label="显示或隐藏 Google API Key" aria-pressed="false" title="显示/隐藏">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path class="icon-eye" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
-              <circle class="icon-eye" cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field__label" for="baiduAppId">百度翻译 App ID</label>
-        <div class="input-wrap">
-          <input type="text" class="secret-input input--masked" id="baiduAppId" placeholder="开放平台应用 App ID" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
-          <button type="button" class="toggle-visibility" data-target="baiduAppId" aria-label="显示或隐藏百度 App ID" aria-pressed="false" title="显示/隐藏">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path class="icon-eye" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
-              <circle class="icon-eye" cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field__label" for="baiduKey">百度翻译 Key</label>
-        <div class="input-wrap">
-          <input type="text" class="secret-input input--masked" id="baiduKey" placeholder="开放平台应用密钥" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
-          <button type="button" class="toggle-visibility" data-target="baiduKey" aria-label="显示或隐藏百度 Key" aria-pressed="false" title="显示/隐藏">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path class="icon-eye" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
-              <circle class="icon-eye" cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <button type="button" id="saveButton" class="btn-primary">保存密钥</button>
-    <p id="saveMessage" class="save-message" role="status" aria-live="polite"></p>
-
+    <p id="apiStatus" class="api-status" role="status" aria-live="polite" hidden></p>
   </div>
-  <script src="../../key.js"></script>
-  <script src="../api-keys.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

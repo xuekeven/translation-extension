@@ -96,6 +96,29 @@ function trimWordCache(cache) {
     });
 }
 
+async function getApiStatus() {
+  const [keys, stored] = await Promise.all([
+    getConfiguredApiKeys(),
+    new Promise(resolve => chrome.storage.local.get(['googleApiIssue', 'baiduApiIssue'], resolve))
+  ]);
+  const issues = [];
+  if (!keys.googleApiKey) {
+    issues.push('Google 翻译密钥未配置，请检查 key.js。');
+  } else if (stored.googleApiIssue) {
+    issues.push(stored.googleApiIssue);
+  }
+  if (!keys.baiduAppId || !keys.baiduKey) {
+    issues.push('百度翻译密钥配置不完整，请检查 key.js 中的 App ID 和 Key。');
+  } else if (stored.baiduApiIssue) {
+    issues.push(stored.baiduApiIssue);
+  }
+  return { issues };
+}
+
+async function recordApiIssue(engine, message) {
+  await chrome.storage.local.set({ [engine + 'ApiIssue']: message });
+}
+
 function byteArrayToBase64(audioData) {
   let binary = '';
   const chunkSize = 8192;
@@ -315,6 +338,12 @@ var MD5 = function (string) {
 
 
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  if (request.action === 'getApiStatus') {
+    getApiStatus().then(sendResponse).catch(function () {
+      sendResponse({ issues: ['暂时无法读取翻译服务状态，请重新加载扩展后重试。'] });
+    });
+    return true;
+  }
   if (request.action === "translate") {
     const tabId = sender.tab?.id;
     const text = typeof request.text === 'string' ? request.text.trim() : '';
@@ -719,10 +748,10 @@ async function translateText(text, tabId, requestId, extra = '') {
 
     const baiduTask = baiduAppId && baiduKey
       ? translateWithBaidu(text, baiduAppId, baiduKey)
-      : Promise.resolve('未设置百度翻译 App ID / Key，请在插件设置中填写。');
+      : Promise.resolve('百度翻译密钥未配置，请检查 key.js。');
     const googleTask = googleApiKey
       ? translateWithGoogle(text, googleApiKey)
-      : Promise.resolve('未设置 Google API Key，请在插件设置中填写。');
+      : Promise.resolve('Google 翻译密钥未配置，请检查 key.js。');
     const [baiduSettled, googleSettled] = await Promise.allSettled([baiduTask, googleTask]);
     const baiduResult = getEngineDisplayResult(baiduSettled, '百度');
     const googleResult = getEngineDisplayResult(googleSettled, 'Google');
@@ -784,9 +813,15 @@ async function translateWithGoogle(text, apiKey) {
     return null;
   });
   if (!response.ok) {
+    if ([400, 401, 403, 429].includes(response.status)) {
+      await recordApiIssue('google', response.status === 429
+        ? 'Google 翻译额度不足或请求过于频繁，请检查账户额度后重试。'
+        : 'Google 翻译密钥或服务权限异常，请检查密钥、API 启用状态及账户额度。');
+    }
     throw new Error(`Google HTTP ${response.status}`);
   }
   if (json?.data?.translations?.length > 0) {
+    await recordApiIssue('google', '');
     return json.data.translations[0].translatedText;
   } else {
     throw new Error('Google translation failed');
@@ -807,9 +842,19 @@ async function translateWithBaidu(text, appId, key) {
     return null;
   });
   if (!response.ok) {
+    if ([401, 403].includes(response.status)) {
+      await recordApiIssue('baidu', '百度翻译认证失败，请检查 App ID、Key 及服务权限。');
+    }
     throw new Error(`Baidu HTTP ${response.status}`);
   }
+  const errorCode = String(json?.error_code || '');
+  if (['52003', '54001', '54004', '54005', '58000', '58002', '90107'].includes(errorCode)) {
+    await recordApiIssue('baidu', ['54004', '54005', '90107'].includes(errorCode)
+      ? '百度翻译余额或额度不足，请检查账户后重试。'
+      : '百度翻译认证或权限异常，请检查 App ID、Key 及服务开通状态。');
+  }
   if (json?.trans_result?.length > 0) {
+    await recordApiIssue('baidu', '');
     return json.trans_result[0].dst;
   } else {
     throw new Error('Baidu translation failed');

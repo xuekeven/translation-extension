@@ -29,9 +29,6 @@ let currentTranslatingWord = '';
 // 添加一个变量来存储直接翻译开关状态
 let isDirectTranslateEnabled = false;
 
-// 添加一个变量来存储是否正在等待翻译结果
-let isWaitingForTranslateResult = false;
-
 let activeTranslationRequestId = 0;
 let sharedAudioContext = null;
 let extensionRoot = null;
@@ -216,8 +213,6 @@ function createTranslatePopup(text, x, y) {
 
   // 添加拖动事件监听器
   translatePopup.addEventListener('mousedown', startDragging);
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', stopDragging);
 
   // 添加一个用于更新内容的方法
   translatePopup.updateContent = function(newContent) {
@@ -254,10 +249,11 @@ function hideTranslatePopup() {
   const existingPopup = queryExtensionElement('.translate-popup');
   if (existingPopup) {
     existingPopup.remove();
-    currentTranslatingWord = ''; // 清除当前翻译的单词
   }
+  currentTranslatingWord = '';
+  isDragging = false;
+  dragTarget = null;
   activeTranslationRequestId += 1;
-  isWaitingForTranslateResult = false;
 }
 
 /**
@@ -306,17 +302,14 @@ function translateText(text, x, y) {
     popup = createTranslatePopup('<p class="translate-loading">正在翻译...</p>', x, y);
   }
 
-  isWaitingForTranslateResult = true;
   const requestId = ++activeTranslationRequestId;
   const sendPromise = chrome.runtime.sendMessage({action: "translate", text: text, requestId: requestId});
   if (sendPromise && typeof sendPromise.then === 'function') {
     sendPromise.then(function (response) {
       if (response?.ok !== false || requestId !== activeTranslationRequestId) return;
-      isWaitingForTranslateResult = false;
       updateTranslatePopup('<p class="sentence-note sentence-note--error">翻译请求未被后台接受，请重试。</p>', '', true);
     }).catch(function () {
       if (requestId !== activeTranslationRequestId) return;
-      isWaitingForTranslateResult = false;
       updateTranslatePopup('<p class="sentence-note sentence-note--error">无法连接插件后台，请重新加载扩展后重试。</p>', '', true);
     });
   }
@@ -397,18 +390,26 @@ function mouseupHandler(e) {
 }
 // 修改鼠标释放事件监听器，添加开关状态检查
 document.addEventListener('mouseup', mouseupHandler);
+document.addEventListener('mousemove', drag, true);
+document.addEventListener('mouseup', stopDragging, true);
 
-// 监听点击事件，用于隐藏翻译图标和弹出框
+document.addEventListener('pointerdown', function(e) {
+  if (!e.isTrusted || isExtensionInteraction(e)) return;
+  hideTranslateIcon();
+  hideTranslatePopup();
+}, true);
+
+document.addEventListener('keydown', function(e) {
+  if (!e.isTrusted || e.key !== 'Escape') return;
+  hideTranslateIcon();
+  hideTranslatePopup();
+}, true);
+
 document.addEventListener('click', function(e) {
   if (!e.isTrusted) return;
-  // 然后检查translatePopup是否存在，如果存在且点击不在其内部，则隐藏它
   const selectedText = window.getSelection().toString().trim();
   if (!selectedText) {
     hideTranslateIcon();
-  }
-  const translatePopup = queryExtensionElement('.translate-popup');
-  if (translatePopup && !translatePopup.contains(e.target) && !isWaitingForTranslateResult) {
-    hideTranslatePopup();
   }
 });
 
@@ -428,7 +429,6 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     return false; // 不需要异步响应
   } else if (request.action === "updateTranslation") {
     if (request.requestId !== activeTranslationRequestId) return false;
-    isWaitingForTranslateResult = !request.complete;
     if (!isTranslationEnabled) return false;
     updateTranslatePopup(request.translation, request.word, request.complete);
     return false; // 不需要异步响应
